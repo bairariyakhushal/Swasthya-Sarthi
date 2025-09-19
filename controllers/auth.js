@@ -71,11 +71,13 @@ exports.signup = async (req, res) => {
             // Volunteer specific fields
             drivingLicense,
             age,
-            vehicle,
+            vehicleType,
             vehicleNumber,
+            city, // Simple city string
+            radius = 10
         } = req.body;
 
-        // Validate required fields
+        // Basic validation
         if (!firstName || !lastName || !email || !password || !confirmPassword || !accountType || !otp) {
             return res.status(403).send({
                 success: false,
@@ -92,7 +94,7 @@ exports.signup = async (req, res) => {
             });
         }
 
-        // Check if password and confirm password match
+        // Password match check
         if (password !== confirmPassword) {
             return res.status(400).json({
                 success: false,
@@ -100,7 +102,7 @@ exports.signup = async (req, res) => {
             });
         }
 
-        // Check if user already exists
+        // Check existing user
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(400).json({
@@ -109,10 +111,10 @@ exports.signup = async (req, res) => {
             });
         }
 
-        // Hash the password
+        // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Create the user
+        // Create user
         const user = await User.create({
             firstName,
             lastName,
@@ -120,10 +122,12 @@ exports.signup = async (req, res) => {
             contactNumber,
             password: hashedPassword,
             accountType,
-            image: `https://api.dicebear.com/5.x/initials/svg?seed=${firstName}${lastName}`,
+            image: `https://api.dicebear.com/5.x/initials/svg?seed=${firstName[0]}${lastName[0]}`,
         });
 
-        // Create role-specific documents
+        // Role-specific document creation
+        let roleDocument = null;
+
         if (accountType === "Vendor") {
             if (!GSTIN || !licenseNumber) {
                 return res.status(400).json({
@@ -131,41 +135,61 @@ exports.signup = async (req, res) => {
                     message: "GSTIN and License Number are required for Vendor registration",
                 });
             }
-            await Vendor.create({
+            roleDocument = await Vendor.create({
                 user: user._id,
                 GSTIN,
                 licenseNumber,
             });
-        } else if (accountType === "Volunteer") {
-            if (!drivingLicense || !age || !vehicle || !vehicleNumber || age < 18) {
+        } 
+        else if (accountType === "Volunteer") {
+            if (!drivingLicense || !age || !vehicleType || !vehicleNumber || !city) {
                 return res.status(400).json({
                     success: false,
                     message: "All volunteer details required and age must be 18+",
                 });
             }
-            await Volunteer.create({
+            
+            if (age < 18) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Age must be 18 or above for volunteer registration",
+                });
+            }
+
+            roleDocument = await Volunteer.create({
                 user: user._id,
                 drivingLicense,
                 age,
-                vehicle,
+                vehicleType,
                 vehicleNumber,
+                serviceArea: {
+                    city: city, // Use simple city string
+                    radius: radius || 10
+                }
             });
-        } else if (accountType === "Admin") {
-            await Admin.create({
+        } 
+        else if (accountType === "Admin") {
+            roleDocument = await Admin.create({
                 user: user._id,
             });
         }
 
+        // Remove password from response
+        user.password = undefined;
+
         return res.status(200).json({
             success: true,
             user,
-            message: "User registered successfully",
+            roleDocument,
+            message: `${accountType} registered successfully`,
         });
+
     } catch (error) {
-        console.error(error);
+        console.error("Signup error:", error);
         return res.status(500).json({
             success: false,
-            message: error.message,
+            message: "Registration failed",
+            error: error.message,
         });
     }
 };
