@@ -41,22 +41,24 @@ exports.auth = async (req, res, next) => {
     }
 };
 
-// Middleware for checking if user is Admin
+// Admin authorization middleware
 exports.isAdmin = async (req, res, next) => {
     try {
-        const userDetails = await User.findOne({ email: req.user.email });
-
-        if (userDetails.accountType !== "Admin") {
-            return res.status(401).json({
+        const user = await User.findById(req.user.id);
+        
+        if (!user || user.accountType !== 'Admin') {
+            return res.status(403).json({
                 success: false,
-                message: "This is a Protected Route for Admin",
+                message: "Access denied. Admin privileges required."
             });
         }
+        
         next();
     } catch (error) {
-        return res.status(500).json({ 
-            success: false, 
-            message: `User Role Can't be Verified` 
+        return res.status(500).json({
+            success: false,
+            message: "Error checking admin privileges",
+            error: error.message
         });
     }
 };
