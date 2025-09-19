@@ -62,39 +62,57 @@ exports.getLocationCoordinates = async (req, res) => {
 // Vendor registers a new pharmacy
 exports.registerPharmacy = async (req, res) => {
     try {
-        const { name, address, longitude, latitude } = req.body;
-        const vendorId = req.user.id; // assuming auth middleware sets req.user
+        const { 
+            name, 
+            address, 
+            longitude, 
+            latitude, 
+            licenseNumber, 
+            gstNumber, 
+            contactNumber 
+        } = req.body;
+        const vendorId = req.user.id;
 
-        if (!name || !address || !longitude || !latitude) {
-            return res.status(400).json({ success: false, message: "All fields required" });
+        // Validation
+        if (!name || !address || !longitude || !latitude || !licenseNumber || !contactNumber) {
+            return res.status(400).json({
+                success: false,
+                message: "All required fields must be provided"
+            });
         }
 
-        // Check if vendor exists
-        const vendor = await Vendor.findOne({ user: vendorId });
-        if (!vendor) {
-            return res.status(404).json({ success: false, message: "Vendor not found" });
-        }
-
-        // Create pharmacy
-        const pharmacy = await Pharmacy.create({
+        // Create pharmacy with pending status
+        const pharmacy = new Pharmacy({
             name,
             address,
-            location: {
-                type: "Point",
-                coordinates: [parseFloat(longitude), parseFloat(latitude)]
-            },
             owner: vendorId,
-            inventory: []
+            coordinates: { latitude, longitude },
+            licenseNumber,
+            gstNumber,
+            contactNumber,
+            approvalStatus: 'pending' // Default pending
         });
 
-        // Add pharmacy to vendor's pharmacies array
+        await pharmacy.save();
+
+        // Add pharmacy to vendor's pharmacies
+        const vendor = await User.findById(vendorId);
         vendor.pharmacies.push(pharmacy._id);
         await vendor.save();
 
-        res.status(201).json({ success: true, pharmacy, message: "Pharmacy registered successfully" });
+        res.status(201).json({
+            success: true,
+            message: "Pharmacy registered successfully. Waiting for admin approval.",
+            pharmacy: pharmacy
+        });
+
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: "Error registering pharmacy", error: error.message });
+        console.error("Register pharmacy error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Error registering pharmacy",
+            error: error.message
+        });
     }
 };
 
