@@ -20,6 +20,11 @@ const volunteerSchema = new mongoose.Schema(
             type: String,
             required: true
         },
+        age: {
+            type: Number,
+            required: true,
+            min: 18
+        },
         currentLocation: {
             latitude: { type: Number },
             longitude: { type: Number },
