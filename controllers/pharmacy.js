@@ -1,5 +1,6 @@
 const Pharmacy = require("../models/pharmacy");
 const Vendor = require("../models/vendor");
+const User = require("../models/user");
 
 // Helper function to calculate distance between two coordinates
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -62,15 +63,7 @@ exports.getLocationCoordinates = async (req, res) => {
 // Vendor registers a new pharmacy
 exports.registerPharmacy = async (req, res) => {
     try {
-        const { 
-            name, 
-            address, 
-            longitude, 
-            latitude, 
-            licenseNumber, 
-            gstNumber, 
-            contactNumber 
-        } = req.body;
+        const { name, address, longitude, latitude, licenseNumber, gstNumber, contactNumber } = req.body;
         const vendorId = req.user.id;
 
         // Validation
@@ -81,22 +74,37 @@ exports.registerPharmacy = async (req, res) => {
             });
         }
 
-        // Create pharmacy with pending status
+        // Check if vendor exists
+        const vendor = await User.findById(vendorId);
+        if (!vendor || vendor.accountType !== 'Vendor') {
+            return res.status(403).json({
+                success: false,
+                message: "Only vendors can register pharmacies"
+            });
+        }
+
+        // Create pharmacy
         const pharmacy = new Pharmacy({
             name,
             address,
             owner: vendorId,
-            coordinates: { latitude, longitude },
+            coordinates: {
+                latitude: parseFloat(latitude),
+                longitude: parseFloat(longitude)
+            },
             licenseNumber,
             gstNumber,
             contactNumber,
-            approvalStatus: 'pending' // Default pending
+            approvalStatus: 'pending'
         });
 
         await pharmacy.save();
 
-        // Add pharmacy to vendor's pharmacies
-        const vendor = await User.findById(vendorId);
+        // Initialize pharmacies array if it doesn't exist
+        if (!vendor.pharmacies) {
+            vendor.pharmacies = [];
+        }
+        
         vendor.pharmacies.push(pharmacy._id);
         await vendor.save();
 
@@ -167,130 +175,139 @@ exports.updateInventory = async (req, res) => {
 };
 
 // Enhanced medicine search - handles all search scenarios
+// In pharmacy.js controller - Fix searchMedicine function
 exports.searchMedicine = async (req, res) => {
     try {
-        const { longitude, latitude, medicineName, radius = 3 } = req.body;
+        const { medicineName, latitude, longitude, radius = 3 } = req.body; // Use req.query for GET
         
         if (!medicineName) {
-            return res.status(400).json({ success: false, message: "Medicine name required" });
-        }
-
-        if (!longitude || !latitude) {
             return res.status(400).json({ 
                 success: false, 
-                message: "Location coordinates required. Use /pharmacy/location to get coordinates from address." 
+                message: "Medicine name is required" 
             });
-        }
-
-        const searchLat = parseFloat(latitude);
-        const searchLon = parseFloat(longitude);
-        
-        if (isNaN(searchLat) || isNaN(searchLon)) {
-            return res.status(400).json({ success: false, message: "Invalid coordinates provided" });
         }
 
         let result = [];
-        let searchType = "within_radius";
-        
-        // First try within specified radius (default 3km)
-        const nearbyPharmacies = await Pharmacy.find({
-            location: {
-                $near: {
-                    $geometry: { type: "Point", coordinates: [searchLon, searchLat] },
-                    $maxDistance: radius * 1000 // Convert km to meters
-                }
-            },
-            inventory: {
-                $elemMatch: { medicineName: { $regex: medicineName, $options: "i" }, stock: { $gt: 0 } }
-            }
-        }).populate('owner', 'firstName lastName email contactNumber');
+        let searchType = "global_search";
 
-        if (nearbyPharmacies.length > 0) {
-            // Found within radius
-            result = nearbyPharmacies.map(pharmacy => {
-                const med = pharmacy.inventory.find(m => 
+        // If location provided, search by proximity
+        if (latitude && longitude) {
+            const searchLat = parseFloat(latitude);
+            const searchLon = parseFloat(longitude);
+            
+            if (isNaN(searchLat) || isNaN(searchLon)) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Valid latitude and longitude required" 
+                });
+            }
+
+            // Find all pharmacies with the medicine
+            const pharmacies = await Pharmacy.find({
+                'inventory.medicineName': { $regex: medicineName, $options: "i" },
+                'inventory.stock': { $gt: 0 },
+                approvalStatus: 'approved' // Only approved pharmacies
+            }).populate('owner', 'firstName lastName contactNumber');
+
+            // Calculate distances and filter
+            const pharmaciesWithDistance = [];
+            
+            for (const pharmacy of pharmacies) {
+                const medicine = pharmacy.inventory.find(m => 
                     m.medicineName.toLowerCase().includes(medicineName.toLowerCase()) && m.stock > 0
                 );
-                const distance = calculateDistance(
-                    searchLat, searchLon, 
-                    pharmacy.location.coordinates[1], pharmacy.location.coordinates[0]
+
+                if (medicine) {
+                    const distance = calculateDistance(
+                        searchLat, searchLon, 
+                        pharmacy.coordinates.latitude, pharmacy.coordinates.longitude
+                    );
+
+                    pharmaciesWithDistance.push({
+                        pharmacyId: pharmacy._id,
+                        pharmacyName: pharmacy.name,
+                        address: pharmacy.address,
+                        medicineName: medicine.medicineName,
+                        price: medicine.sellingPrice,
+                        isAvailable: true,
+                        distance: `${distance.toFixed(1)} km`,
+                        distanceValue: distance,
+                        ownerName: `${pharmacy.owner.firstName} ${pharmacy.owner.lastName}`,
+                        ownerContact: pharmacy.owner.contactNumber
+                    });
+                }
+            }
+
+            // Sort by distance
+            pharmaciesWithDistance.sort((a, b) => a.distanceValue - b.distanceValue);
+
+            // Check if any pharmacy within radius
+            const withinRadius = pharmaciesWithDistance.filter(p => p.distanceValue <= radius);
+            
+            if (withinRadius.length > 0) {
+                result = withinRadius;
+                searchType = `within_${radius}km`;
+            } else {
+                // Show nearest 5 pharmacies if none within radius
+                result = pharmaciesWithDistance.slice(0, 5);
+                searchType = "nearest_available";
+            }
+
+            // Remove distanceValue from response
+            result = result.map(({distanceValue, ...pharmacy}) => pharmacy);
+        } else {
+            // Global search without location
+            const pharmacies = await Pharmacy.find({
+                'inventory.medicineName': { $regex: medicineName, $options: "i" },
+                'inventory.stock': { $gt: 0 },
+                approvalStatus: 'approved'
+            }).populate('owner', 'firstName lastName contactNumber');
+
+            result = pharmacies.map(pharmacy => {
+                const medicine = pharmacy.inventory.find(m => 
+                    m.medicineName.toLowerCase().includes(medicineName.toLowerCase()) && m.stock > 0
                 );
+
                 return {
                     pharmacyId: pharmacy._id,
                     pharmacyName: pharmacy.name,
                     address: pharmacy.address,
+                    medicineName: medicine.medicineName,
+                    price: medicine.sellingPrice,
+                    isAvailable: true,
                     ownerName: `${pharmacy.owner.firstName} ${pharmacy.owner.lastName}`,
-                    ownerContact: pharmacy.owner.contactNumber,
-                    medicineName: med.medicineName,
-                    price: med.sellingPrice,
-                    isAvailable: true, // Don't show exact stock
-                    distance: `${distance.toFixed(2)} km`,
-                    coordinates: {
-                        latitude: pharmacy.location.coordinates[1],
-                        longitude: pharmacy.location.coordinates[0]
-                    }
+                    ownerContact: pharmacy.owner.contactNumber
                 };
             });
-            searchType = `within_${radius}km`;
-        } else {
-            // Not found within radius, find nearest pharmacies with medicine
-            const allPharmacies = await Pharmacy.find({
-                inventory: {
-                    $elemMatch: { 
-                        medicineName: { $regex: medicineName, $options: "i" }, 
-                        stock: { $gt: 0 } 
-                    }
-                }
-            }).populate('owner', 'firstName lastName email contactNumber');
-
-            // Calculate distances and sort by nearest
-            const pharmaciesWithDistance = allPharmacies.map(pharmacy => {
-                const med = pharmacy.inventory.find(m => 
-                    m.medicineName.toLowerCase().includes(medicineName.toLowerCase()) && m.stock > 0
-                );
-                const distance = calculateDistance(
-                    searchLat, searchLon, 
-                    pharmacy.location.coordinates[1], pharmacy.location.coordinates[0]
-                );
-                return {
-                    pharmacyId: pharmacy._id,
-                    pharmacyName: pharmacy.name,
-                    address: pharmacy.address,
-                    ownerName: `${pharmacy.owner.firstName} ${pharmacy.owner.lastName}`,
-                    ownerContact: pharmacy.owner.contactNumber,
-                    medicineName: med.medicineName,
-                    price: med.sellingPrice,
-                    isAvailable: true,
-                    distance: `${distance.toFixed(2)} km`,
-                    distanceValue: distance,
-                    coordinates: {
-                        latitude: pharmacy.location.coordinates[1],
-                        longitude: pharmacy.location.coordinates[0]
-                    }
-                };
-            }).sort((a, b) => a.distanceValue - b.distanceValue);
-
-            result = pharmaciesWithDistance.slice(0, 10); // Top 10 nearest
-            searchType = "nearest_available";
+            
+            searchType = "global_search";
         }
 
-        // Remove distanceValue from final result
-        result = result.map(({distanceValue, ...pharmacy}) => pharmacy);
+        if (result.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: `No pharmacy found with ${medicineName}`
+            });
+        }
 
         res.status(200).json({ 
             success: true, 
             searchType,
-            searchLocation: { latitude: searchLat, longitude: searchLon },
             totalResults: result.length,
             message: result.length > 0 ? 
                 (searchType.includes('within') ? `Found ${result.length} pharmacy(ies) within ${radius}km` :
                  searchType === 'nearest_available' ? `Medicine not found within ${radius}km. Showing nearest available pharmacies.` :
                  `Found ${result.length} pharmacy(ies)`) :
-                "No pharmacies found with this medicine",
+                `No pharmacy found with ${medicineName}`,
             pharmacies: result 
         });
+
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: "Error searching medicine", error: error.message });
+        console.error("Search medicine error:", error);
+        res.status(500).json({ 
+            success: false, 
+            message: "Error searching medicine", 
+            error: error.message 
+        });
     }
 };
