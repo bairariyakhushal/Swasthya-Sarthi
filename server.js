@@ -36,13 +36,17 @@ app.use(
 // Connecting to cloudinary
 cloudinaryConnect();
 
-// Routes
+// Import routes
 const authRoutes = require("./routes/auth");
 const pharmacyRoutes = require("./routes/pharmacy");
+const orderRoutes = require("./routes/order");
+const adminRoutes = require("./routes/admin");
 
-// Route middlewares
+// Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/pharmacy", pharmacyRoutes);
+app.use("/api/v1/order", orderRoutes);
+app.use("/api/v1/admin", adminRoutes);
 
 // Testing the server
 app.get("/", (req, res) => {
