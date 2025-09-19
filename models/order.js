@@ -11,11 +11,15 @@ const orderSchema = new mongoose.Schema({
         ref: 'Pharmacy', 
         required: true 
     },
+    vendor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
     medicines: [
         {
-            medicine: { 
-                type: mongoose.Schema.Types.ObjectId, 
-                ref: 'Medicine', 
+            medicineName: { 
+                type: String, 
                 required: true 
             },
             quantity: { 
@@ -25,32 +29,49 @@ const orderSchema = new mongoose.Schema({
             price: { 
                 type: Number, 
                 required: true 
+            },
+            total: {
+                type: Number,
+                required: true
             }
         }
     ],
-    totalPrice: { 
+    totalAmount: { 
         type: Number, 
         required: true 
     },
-    status: { 
+    orderStatus: { 
         type: String, 
-        enum: ['pending', 'accepted', 'declined', 'delivered'], 
+        enum: ['pending', 'confirmed', 'preparing', 'ready_for_pickup', 'out_for_delivery', 'delivered', 'cancelled'], 
         default: 'pending' 
     },
-    deliveryType: { 
+    paymentStatus: { 
         type: String, 
-        enum: ['pickup', 'volunteer'], 
-        required: true 
+        enum: ['pending', 'completed', 'failed'], 
+        default: 'pending' 
+    },
+    deliveryAddress: {
+        type: String,
+        required: true
+    },
+    contactNumber: {
+        type: String,
+        required: true
     },
     volunteer: { 
         type: mongoose.Schema.Types.ObjectId, 
         ref: 'User' 
     },
-    paymentStatus: { 
-        type: String, 
-        enum: ['pending', 'paid'], 
-        default: 'pending' 
+    // Razorpay fields
+    razorpayOrderId: {
+        type: String
     },
+    razorpayPaymentId: {
+        type: String
+    },
+    razorpaySignature: {
+        type: String
+    }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);
