@@ -7,7 +7,8 @@ const {
     getOrderDetails,
     getVendorOrders,
     updateOrderStatus,
-    cancelOrder
+    cancelOrder,
+    trackOrder
 } = require("../controllers/order");
 const { auth, isVendor } = require("../middlewares/auth");
 
@@ -19,6 +20,7 @@ router.post("/verify-payment", auth, verifyPayment);
 router.get("/my-orders", auth, getUserOrders);
 router.get("/:orderId", auth, getOrderDetails);
 router.put("/cancel/:orderId", auth, cancelOrder);
+router.get("/track/:orderId", auth, trackOrder);
 
 // Vendor routes
 router.get("/vendor/orders", auth, isVendor, getVendorOrders);
