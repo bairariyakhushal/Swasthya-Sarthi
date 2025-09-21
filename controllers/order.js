@@ -59,7 +59,7 @@ const validateAndCalculateOrder = async (pharmacyId, medicines) => {
 // Step 1: Create Razorpay Order (before placing actual order)
 exports.createPaymentOrder = async (req, res) => {
     try {
-        const { pharmacyId, medicines, deliveryAddress, contactNumber } = req.body;
+        const { pharmacyId, medicines, deliveryAddress, contactNumber , deliveryCoordinates } = req.body;
         const userId = req.user.id;
 
         // Validation
@@ -97,12 +97,15 @@ exports.createPaymentOrder = async (req, res) => {
             pharmacy: pharmacyId,
             vendor: pharmacy.owner._id,
             medicines: orderMedicines,
+            medicineTotal: totalAmount,
             totalAmount: totalAmount,
             deliveryAddress: deliveryAddress,
+            deliveryCoordinates: deliveryCoordinates || null,
             contactNumber: contactNumber,
             orderStatus: 'pending',
             paymentStatus: 'pending',
-            razorpayOrderId: razorpayOrder.id
+            razorpayOrderId: razorpayOrder.id,
+            orderPlacedAt: new Date()
         });
 
         await order.save();
@@ -394,6 +397,71 @@ exports.cancelOrder = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "Error cancelling order",
+            error: error.message
+        });
+    }
+};
+
+// Track order for customer
+exports.trackOrder = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const customerId = req.user.id;
+        
+        const order = await Order.findOne({ 
+            _id: orderId, 
+            customer: customerId 
+        })
+        .populate('pharmacy', 'name address coordinates')
+        .populate('volunteer', 'firstName lastName contactNumber currentLocation vehicleType vehicleNumber')
+        .populate('vendor', 'firstName lastName contactNumber');
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: "Order not found"
+            });
+        }
+
+        const trackingInfo = {
+            orderId: order._id,
+            orderStatus: order.orderStatus,
+            paymentStatus: order.paymentStatus,
+            medicines: order.medicines,
+            pharmacy: order.pharmacy,
+            deliveryAddress: order.deliveryAddress,
+            deliveryDistance: order.deliveryDistance,
+            deliveryCharges: order.deliveryCharges,
+            totalAmount: order.totalAmount,
+            timeline: {
+                orderPlaced: order.orderPlacedAt,
+                assigned: order.assignedAt,
+                pickedUp: order.pickedUpAt,
+                outForDelivery: order.outForDeliveryAt,
+                delivered: order.deliveredAt
+            }
+        };
+
+        if (order.volunteer) {
+            trackingInfo.volunteer = {
+                name: `${order.volunteer.firstName} ${order.volunteer.lastName}`,
+                contact: order.volunteer.contactNumber,
+                vehicleType: order.volunteer.vehicleType,
+                vehicleNumber: order.volunteer.vehicleNumber,
+                currentLocation: order.volunteer.currentLocation
+            };
+        }
+
+        res.status(200).json({
+            success: true,
+            tracking: trackingInfo
+        });
+
+    } catch (error) {
+        console.error("Track order error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Error tracking order",
             error: error.message
         });
     }
