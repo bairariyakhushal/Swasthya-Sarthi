@@ -7,7 +7,7 @@ const crypto = require("crypto");
 console.log('Key ID:', process.env.RAZORPAY_KEY); // Remove this after debugging
 
 if (!process.env.RAZORPAY_KEY || !process.env.RAZORPAY_SECRET) {
-  throw new Error('Razorpay credentials are not configured properly');
+    throw new Error('Razorpay credentials are not configured properly');
 }
 
 
@@ -29,7 +29,7 @@ const validateAndCalculateOrder = async (pharmacyId, medicines) => {
 
     for (const medicine of medicines) {
         const { medicineName, quantity } = medicine;
-        
+
         const inventoryItem = pharmacy.inventory.find(
             item => item.medicineName.toLowerCase() === medicineName.toLowerCase()
         );
@@ -59,7 +59,15 @@ const validateAndCalculateOrder = async (pharmacyId, medicines) => {
 // Step 1: Create Razorpay Order (before placing actual order)
 exports.createPaymentOrder = async (req, res) => {
     try {
-        const { pharmacyId, medicines, deliveryAddress, contactNumber , deliveryCoordinates } = req.body;
+        const {
+            pharmacyId,
+            medicines,
+            deliveryType,           // NEW FIELD
+            deliveryAddress,        // Optional for pickup
+            contactNumber,
+            deliveryCoordinates     // Optional for pickup
+        } = req.body;
+
         const userId = req.user.id;
 
         // Validation
@@ -70,53 +78,96 @@ exports.createPaymentOrder = async (req, res) => {
             });
         }
 
-        if (!deliveryAddress || !contactNumber) {
+        if (!deliveryType || !['delivery', 'pickup'].includes(deliveryType)) {
             return res.status(400).json({
                 success: false,
-                message: "Delivery address and contact number are required"
+                message: "Delivery type must be 'delivery' or 'pickup'"
             });
+        }
+
+        // Delivery specific validation
+        if (deliveryType === 'delivery') {
+            if (!deliveryAddress || !contactNumber) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Delivery address and contact number are required for delivery orders"
+                });
+            }
         }
 
         // Validate and calculate order
         const { pharmacy, orderMedicines, totalAmount } = await validateAndCalculateOrder(pharmacyId, medicines);
 
+        // Calculate delivery charges (0 for pickup)
+        let deliveryCharges = 0;
+        let finalAmount = totalAmount;
+
+        if (deliveryType === 'delivery' && deliveryCoordinates) {
+            // Calculate delivery charges based on distance
+            const distance = calculateDistance(
+                pharmacy.coordinates.latitude, pharmacy.coordinates.longitude,
+                deliveryCoordinates.latitude, deliveryCoordinates.longitude
+            );
+            deliveryCharges = calculateDeliveryCharges(distance);
+            finalAmount = totalAmount + deliveryCharges;
+        }
+
+        // Generate pickup code for in-store pickup
+        let pickupCode = null;
+        if (deliveryType === 'pickup') {
+            pickupCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
         // Create Razorpay order
         const razorpayOrder = await razorpay.orders.create({
-            amount: totalAmount * 100, // Amount in paise
+            amount: finalAmount * 100, // Amount in paise
             currency: "INR",
             receipt: `order_${Date.now()}`,
             notes: {
                 pharmacyId: pharmacyId,
-                userId: userId
+                userId: userId,
+                deliveryType: deliveryType
             }
-        });
+        })
 
-        // Create our order in database (with pending payment)
+         // Create our order in database
         const order = new Order({
             customer: userId,
             pharmacy: pharmacyId,
             vendor: pharmacy.owner._id,
             medicines: orderMedicines,
+            deliveryType: deliveryType,
             medicineTotal: totalAmount,
-            totalAmount: totalAmount,
-            deliveryAddress: deliveryAddress,
-            deliveryCoordinates: deliveryCoordinates || null,
+            deliveryCharges: deliveryCharges,
+            totalAmount: finalAmount,
             contactNumber: contactNumber,
             orderStatus: 'pending',
             paymentStatus: 'pending',
             razorpayOrderId: razorpayOrder.id,
-            orderPlacedAt: new Date()
+            orderPlacedAt: new Date(),
+            
+            // Conditional fields
+            ...(deliveryType === 'delivery' && {
+                deliveryAddress: deliveryAddress,
+                deliveryCoordinates: deliveryCoordinates || null
+            }),
+            ...(deliveryType === 'pickup' && {
+                pickupCode: pickupCode
+            })
         });
 
         await order.save();
 
-        res.status(200).json({
+         res.status(200).json({
             success: true,
-            message: "Order created, proceed to payment",
+            message: `${deliveryType === 'delivery' ? 'Delivery' : 'Pickup'} order created, proceed to payment`,
             orderId: order._id,
             razorpayOrderId: razorpayOrder.id,
-            amount: totalAmount,
-            key: process.env.RAZORPAY_KEY_ID,
+            amount: finalAmount,
+            deliveryType: deliveryType,
+            deliveryCharges: deliveryCharges,
+            pickupCode: pickupCode, // Only for pickup orders
+            key: process.env.RAZORPAY_KEY,
             pharmacyName: pharmacy.name,
             medicines: orderMedicines
         });
@@ -133,11 +184,11 @@ exports.createPaymentOrder = async (req, res) => {
 // Step 2: Verify payment and confirm order
 exports.verifyPayment = async (req, res) => {
     try {
-        const { 
-            razorpay_order_id, 
-            razorpay_payment_id, 
+        const {
+            razorpay_order_id,
+            razorpay_payment_id,
             razorpay_signature,
-            orderId 
+            orderId
         } = req.body;
 
         // Verify signature
@@ -310,7 +361,7 @@ exports.updateOrderStatus = async (req, res) => {
         const vendorId = req.user.id;
 
         const validStatuses = ['pending', 'confirmed', 'preparing', 'ready_for_pickup', 'out_for_delivery', 'delivered', 'cancelled'];
-        
+
         if (!validStatuses.includes(orderStatus)) {
             return res.status(400).json({
                 success: false,
@@ -407,14 +458,14 @@ exports.trackOrder = async (req, res) => {
     try {
         const { orderId } = req.params;
         const customerId = req.user.id;
-        
-        const order = await Order.findOne({ 
-            _id: orderId, 
-            customer: customerId 
+
+        const order = await Order.findOne({
+            _id: orderId,
+            customer: customerId
         })
-        .populate('pharmacy', 'name address coordinates')
-        .populate('volunteer', 'firstName lastName contactNumber currentLocation vehicleType vehicleNumber')
-        .populate('vendor', 'firstName lastName contactNumber');
+            .populate('pharmacy', 'name address coordinates')
+            .populate('volunteer', 'firstName lastName contactNumber currentLocation vehicleType vehicleNumber')
+            .populate('vendor', 'firstName lastName contactNumber');
 
         if (!order) {
             return res.status(404).json({
