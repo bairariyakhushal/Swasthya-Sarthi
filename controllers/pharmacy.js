@@ -63,7 +63,7 @@ exports.getLocationCoordinates = async (req, res) => {
 // Vendor registers a new pharmacy
 exports.registerPharmacy = async (req, res) => {
     try {
-        const { name, address, longitude, latitude, licenseNumber, gstNumber, contactNumber } = req.body;
+        const { name, address, latitude, longitude, licenseNumber, gstNumber, contactNumber } = req.body;
         const vendorId = req.user.id;
 
         // Validation
