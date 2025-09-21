@@ -1,6 +1,8 @@
 const Pharmacy = require("../models/pharmacy");
 const Vendor = require("../models/vendor");
 const User = require("../models/user");
+const Order = require("../models/order");
+const { mailSender } = require("../utils/mailSender");
 
 // Helper function to calculate distance between two coordinates
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -308,6 +310,126 @@ exports.searchMedicine = async (req, res) => {
             success: false, 
             message: "Error searching medicine", 
             error: error.message 
+        });
+    }
+};
+
+//mark order ready for pickup
+exports.markOrderReadyForPickup = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const vendorId = req.user.id;
+
+        const order = await Order.findOne({
+            _id: orderId,
+            vendor: vendorId,
+            deliveryType: 'pickup',
+            orderStatus: 'confirmed'
+        }).populate('customer', 'firstName lastName email');
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: "Pickup order not found"
+            });
+        }
+
+        order.orderStatus = 'ready_for_pickup';
+        order.readyForPickupAt = new Date();
+        await order.save();
+
+        // Send notification to customer (email/SMS)
+        try {
+            const emailBody = `
+                Your order is ready for pickup!
+                
+                Pickup Code: ${order.pickupCode}
+                Pharmacy: ${order.pharmacy.name}
+                Total Amount: ₹${order.totalAmount}
+                
+                Please visit the pharmacy with this pickup code.
+            `;
+            
+            await mailSender(
+                order.customer.email,
+                "Order Ready for Pickup",
+                emailBody
+            );
+        } catch (emailError) {
+            console.log("Email notification failed:", emailError);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Order marked as ready for pickup",
+            order: {
+                orderId: order._id,
+                pickupCode: order.pickupCode,
+                orderStatus: order.orderStatus,
+                readyForPickupAt: order.readyForPickupAt
+            }
+        });
+
+    } catch (error) {
+        console.error("Mark ready for pickup error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Error marking order ready for pickup",
+            error: error.message
+        });
+    }
+};
+
+// Vendor confirms customer pickup
+exports.confirmCustomerPickup = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const { pickupCode } = req.body;
+        const vendorId = req.user.id;
+
+        if (!pickupCode) {
+            return res.status(400).json({
+                success: false,
+                message: "Pickup code is required"
+            });
+        }
+
+        const order = await Order.findOne({
+            _id: orderId,
+            vendor: vendorId,
+            deliveryType: 'pickup',
+            orderStatus: 'ready_for_pickup',
+            pickupCode: pickupCode.toUpperCase()
+        });
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: "Invalid pickup code or order not ready"
+            });
+        }
+
+        order.orderStatus = 'completed';
+        order.pickedUpByCustomerAt = new Date();
+        await order.save();
+
+        res.status(200).json({
+            success: true,
+            message: "Order pickup confirmed",
+            order: {
+                orderId: order._id,
+                orderStatus: order.orderStatus,
+                pickedUpAt: order.pickedUpByCustomerAt,
+                totalAmount: order.totalAmount
+            }
+        });
+
+    } catch (error) {
+        console.error("Confirm pickup error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Error confirming pickup",
+            error: error.message
         });
     }
 };
