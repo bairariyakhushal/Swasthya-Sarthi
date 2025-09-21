@@ -22,15 +22,21 @@ const orderSchema = new mongoose.Schema({
         price: { type: Number, required: true },
         total: { type: Number, required: true }
     }],
-    
-    // Delivery Information
-    volunteer: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
+
+    // NEW FIELDS - Delivery Type
+    deliveryType: {
+        type: String,
+        enum: ['delivery', 'pickup'],
+        required: true,
+        default: 'delivery'
     },
+    
+    // Conditional fields based on delivery type
     deliveryAddress: {
         type: String,
-        required: true
+        required: function() {
+            return this.deliveryType === 'delivery';
+        }
     },
     deliveryCoordinates: {
         latitude: { type: Number },
@@ -40,10 +46,24 @@ const orderSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+
+    // Volunteer only for delivery orders
+    volunteer: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: function() {
+            return this.deliveryType === 'delivery';
+        }
+    },
     
     // Pricing
     medicineTotal: { type: Number , required: true },
-    deliveryCharges: { type: Number, default: 0 },
+    deliveryCharges: { 
+        type: Number, 
+        default: function() {
+            return this.deliveryType === 'pickup' ? 0 : undefined;
+        }
+    },
     totalAmount: { type: Number, required: true },
     
     // Distance
@@ -52,7 +72,7 @@ const orderSchema = new mongoose.Schema({
     // Status Management
     orderStatus: { 
         type: String, 
-        enum: ['pending', 'confirmed', 'assigned', 'picked_up', 'out_for_delivery', 'delivered', 'cancelled'], 
+        enum: ['pending', 'confirmed', 'assigned', 'picked_up', 'out_for_delivery', 'delivered', 'ready_for_pickup', 'completed', 'cancelled'], 
         default: 'pending' 
     },
     paymentStatus: { 
@@ -60,6 +80,16 @@ const orderSchema = new mongoose.Schema({
         enum: ['pending', 'completed', 'failed'], 
         default: 'pending' 
     },
+
+    // Pickup specific fields
+    pickupCode: {
+        type: String,
+        required: function() {
+            return this.deliveryType === 'pickup';
+        }
+    },
+    readyForPickupAt: { type: Date },
+    pickedUpByCustomerAt: { type: Date },
     
     // Delivery Timeline
     orderPlacedAt: { type: Date, default: Date.now },
