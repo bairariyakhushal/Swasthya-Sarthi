@@ -41,12 +41,14 @@ const authRoutes = require("./routes/auth");
 const pharmacyRoutes = require("./routes/pharmacy");
 const orderRoutes = require("./routes/order");
 const adminRoutes = require("./routes/admin");
+const volunteerRoutes = require("./routes/volunteer");
 
 // Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/pharmacy", pharmacyRoutes);
 app.use("/api/v1/order", orderRoutes);
 app.use("/api/v1/admin", adminRoutes);
+app.use("/api/v1/volunteer", volunteerRoutes);
 
 // Testing the server
 app.get("/", (req, res) => {
