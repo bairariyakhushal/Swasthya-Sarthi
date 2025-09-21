@@ -3,6 +3,7 @@ const Pharmacy = require("../models/pharmacy");
 const User = require("../models/user");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
+const mailSender = require("../utils/mailSender");
 
 console.log('Key ID:', process.env.RAZORPAY_KEY); // Remove this after debugging
 
@@ -130,7 +131,7 @@ exports.createPaymentOrder = async (req, res) => {
             }
         })
 
-         // Create our order in database
+        // Create our order in database
         const order = new Order({
             customer: userId,
             pharmacy: pharmacyId,
@@ -145,7 +146,7 @@ exports.createPaymentOrder = async (req, res) => {
             paymentStatus: 'pending',
             razorpayOrderId: razorpayOrder.id,
             orderPlacedAt: new Date(),
-            
+
             // Conditional fields
             ...(deliveryType === 'delivery' && {
                 deliveryAddress: deliveryAddress,
@@ -158,7 +159,7 @@ exports.createPaymentOrder = async (req, res) => {
 
         await order.save();
 
-         res.status(200).json({
+        res.status(200).json({
             success: true,
             message: `${deliveryType === 'delivery' ? 'Delivery' : 'Pickup'} order created, proceed to payment`,
             orderId: order._id,
@@ -232,6 +233,10 @@ exports.verifyPayment = async (req, res) => {
             }
         }
         await pharmacy.save();
+
+        const user = await User.findById(order.customer);
+        const emailBody = `Order Confirmed! Order ID: ${order._id}, Total: ₹${order.totalAmount}`;
+        await mailSender(user.email, "Order Confirmed", emailBody);
 
         const populatedOrder = await Order.findById(order._id)
             .populate('customer', 'firstName lastName email')
@@ -453,7 +458,72 @@ exports.cancelOrder = async (req, res) => {
     }
 };
 
-// Track order for customer
+// // Track order for customer
+// exports.trackOrder = async (req, res) => {
+//     try {
+//         const { orderId } = req.params;
+//         const customerId = req.user.id;
+
+//         const order = await Order.findOne({
+//             _id: orderId,
+//             customer: customerId
+//         })
+//             .populate('pharmacy', 'name address coordinates')
+//             .populate('volunteer', 'firstName lastName contactNumber currentLocation vehicleType vehicleNumber')
+//             .populate('vendor', 'firstName lastName contactNumber');
+
+//         if (!order) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: "Order not found"
+//             });
+//         }
+
+//         const trackingInfo = {
+//             orderId: order._id,
+//             orderStatus: order.orderStatus,
+//             paymentStatus: order.paymentStatus,
+//             medicines: order.medicines,
+//             pharmacy: order.pharmacy,
+//             deliveryAddress: order.deliveryAddress,
+//             deliveryDistance: order.deliveryDistance,
+//             deliveryCharges: order.deliveryCharges,
+//             totalAmount: order.totalAmount,
+//             timeline: {
+//                 orderPlaced: order.orderPlacedAt,
+//                 assigned: order.assignedAt,
+//                 pickedUp: order.pickedUpAt,
+//                 outForDelivery: order.outForDeliveryAt,
+//                 delivered: order.deliveredAt
+//             }
+//         };
+
+//         if (order.volunteer) {
+//             trackingInfo.volunteer = {
+//                 name: `${order.volunteer.firstName} ${order.volunteer.lastName}`,
+//                 contact: order.volunteer.contactNumber,
+//                 vehicleType: order.volunteer.vehicleType,
+//                 vehicleNumber: order.volunteer.vehicleNumber,
+//                 currentLocation: order.volunteer.currentLocation
+//             };
+//         }
+
+//         res.status(200).json({
+//             success: true,
+//             tracking: trackingInfo
+//         });
+
+//     } catch (error) {
+//         console.error("Track order error:", error);
+//         res.status(500).json({
+//             success: false,
+//             message: "Error tracking order",
+//             error: error.message
+//         });
+//     }
+// };
+
+// Update trackOrder function in controllers/order.js
 exports.trackOrder = async (req, res) => {
     try {
         const { orderId } = req.params;
@@ -463,9 +533,9 @@ exports.trackOrder = async (req, res) => {
             _id: orderId,
             customer: customerId
         })
-            .populate('pharmacy', 'name address coordinates')
-            .populate('volunteer', 'firstName lastName contactNumber currentLocation vehicleType vehicleNumber')
-            .populate('vendor', 'firstName lastName contactNumber');
+            .populate('pharmacy', 'name address coordinates contactNumber')
+            .populate('volunteer', 'firstName lastName contactNumber vehicleType vehicleNumber currentLocation')
+            .populate('customer', 'firstName lastName contactNumber');
 
         if (!order) {
             return res.status(404).json({
@@ -474,32 +544,119 @@ exports.trackOrder = async (req, res) => {
             });
         }
 
+         console.log('Order Pharmacy:', order.pharmacy);
+
+        // Calculate progress percentage
+        const statusProgress = {
+            'pending': 10,
+            'confirmed': 25,
+            'assigned': 40,
+            'picked_up': 60,
+            'out_for_delivery': 80,
+            'delivered': 100,
+            'ready_for_pickup': 75,
+            'completed': 100,
+            'cancelled': 0
+        };
+        const progressPercentage = statusProgress[order.orderStatus] || 0;
+
+
         const trackingInfo = {
             orderId: order._id,
             orderStatus: order.orderStatus,
             paymentStatus: order.paymentStatus,
+            deliveryType: order.deliveryType || 'delivery',
+            progressPercentage,
+
+            // Customer Info
+            customer: order.customer ? {
+                name: `${order.customer.firstName} ${order.customer.lastName}`,
+                contact: order.customer.contactNumber
+            } : null,
+
+            // Order Details
             medicines: order.medicines,
-            pharmacy: order.pharmacy,
+
+            // Pharmacy Details (Fixed)
+            pharmacy: order.pharmacy ? {
+                name: order.pharmacy.name,
+                address: order.pharmacy.address,
+                contact: order.pharmacy.contactNumber,
+                coordinates: order.pharmacy.coordinates
+            } : null,
+
+            // Delivery/Pickup Info
             deliveryAddress: order.deliveryAddress,
-            deliveryDistance: order.deliveryDistance,
-            deliveryCharges: order.deliveryCharges,
+            pickupCode: order.pickupCode,
+            contactNumber: order.contactNumber,
+
+            // Distance & Pricing
+            deliveryDistance: order.deliveryDistance ? parseFloat(order.deliveryDistance.toFixed(2)) : null,
+            deliveryCharges: order.deliveryCharges || 0,
+            medicineTotal: order.medicineTotal,
             totalAmount: order.totalAmount,
+
+            // Timing
+            orderPlacedAt: order.orderPlacedAt,
+
+            // Timeline (Enhanced)
             timeline: {
-                orderPlaced: order.orderPlacedAt,
-                assigned: order.assignedAt,
-                pickedUp: order.pickedUpAt,
-                outForDelivery: order.outForDeliveryAt,
-                delivered: order.deliveredAt
+                orderPlaced: {
+                    timestamp: order.orderPlacedAt,
+                    status: 'completed',
+                    message: 'Order placed successfully'
+                },
+                confirmed: {
+                    timestamp: order.orderStatus !== 'pending' ? order.updatedAt : null,
+                    status: order.orderStatus !== 'pending' ? 'completed' : 'pending',
+                    message: order.orderStatus !== 'pending' ? 'Order confirmed by pharmacy' : 'Waiting for pharmacy confirmation'
+                },
+                assigned: {
+                    timestamp: order.assignedAt,
+                    status: order.assignedAt ? 'completed' :
+                        ['assigned', 'picked_up', 'out_for_delivery', 'delivered'].includes(order.orderStatus) ? 'completed' : 'pending',
+                    message: order.assignedAt ? 'Assigned to delivery partner' : 'Waiting for delivery partner assignment'
+                },
+                pickedUp: {
+                    timestamp: order.pickedUpAt,
+                    status: order.pickedUpAt ? 'completed' :
+                        ['picked_up', 'out_for_delivery', 'delivered'].includes(order.orderStatus) ? 'completed' : 'pending',
+                    message: order.pickedUpAt ? 'Order picked up from pharmacy' : 'Waiting for pickup'
+                },
+                outForDelivery: {
+                    timestamp: order.outForDeliveryAt,
+                    status: order.outForDeliveryAt ? 'completed' :
+                        ['out_for_delivery', 'delivered'].includes(order.orderStatus) ? 'completed' : 'pending',
+                    message: order.outForDeliveryAt ? 'Order is out for delivery' : 'Waiting for dispatch'
+                },
+                delivered: {
+                    timestamp: order.deliveredAt,
+                    status: order.deliveredAt ? 'completed' :
+                        order.orderStatus === 'delivered' ? 'completed' : 'pending',
+                    message: order.deliveredAt ? 'Order delivered successfully' : 'Delivery pending'
+                }
             }
         };
 
-        if (order.volunteer) {
+        // Add volunteer info for delivery orders
+        if (order.deliveryType === 'delivery' && order.volunteer) {
             trackingInfo.volunteer = {
                 name: `${order.volunteer.firstName} ${order.volunteer.lastName}`,
                 contact: order.volunteer.contactNumber,
                 vehicleType: order.volunteer.vehicleType,
                 vehicleNumber: order.volunteer.vehicleNumber,
                 currentLocation: order.volunteer.currentLocation
+            };
+        }
+
+        // Add pickup specific info
+        if (order.deliveryType === 'pickup') {
+            trackingInfo.pickup = {
+                code: order.pickupCode,
+                readyAt: order.readyForPickupAt,
+                pickedUpAt: order.pickedUpByCustomerAt,
+                status: order.orderStatus === 'ready_for_pickup' ? 'Ready for pickup' :
+                    order.orderStatus === 'completed' ? 'Completed' : 'Preparing'
             };
         }
 
