@@ -45,15 +45,16 @@ exports.getAvailableOrders = async (req, res) => {
             });
         }
 
-        // Get orders that need delivery
+        // Get only delivery orders (not pickup orders)
         const availableOrders = await Order.find({
             orderStatus: 'confirmed',
+            deliveryType: 'delivery',        // NEW FILTER
             volunteer: { $exists: false },
             paymentStatus: 'completed'
         })
-            .populate('customer', 'firstName lastName contactNumber')
-            .populate('pharmacy', 'name address coordinates')
-            .sort({ createdAt: 1 });
+        .populate('customer', 'firstName lastName contactNumber')
+        .populate('pharmacy', 'name address coordinates')
+        .sort({ createdAt: 1 });
 
         console.log(`Found ${availableOrders.length} available orders`);
 
