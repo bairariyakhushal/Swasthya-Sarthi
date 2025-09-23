@@ -2,6 +2,8 @@ const Pharmacy = require('../models/pharmacy');
 const Volunteer = require('../models/volunteer');
 const User = require('../models/user');
 const Order = require('../models/order');
+const mailTemplates = require('../mail_templates/templates');
+const mailSender = require('../utils/mailSender');
 
 // Get pending pharmacy approvals
 exports.getPendingPharmacies = async (req, res) => {
@@ -32,13 +34,6 @@ exports.updatePharmacyApproval = async (req, res) => {
         const { approvalStatus, rejectionReason } = req.body;
         const adminId = req.user.id;
 
-        if (!['approved', 'rejected'].includes(approvalStatus)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid approval status. Use 'approved' or 'rejected'"
-            });
-        }
-
         if (approvalStatus === 'rejected' && !rejectionReason) {
             return res.status(400).json({
                 success: false,
@@ -60,6 +55,28 @@ exports.updatePharmacyApproval = async (req, res) => {
         
         if (approvalStatus === 'rejected') {
             pharmacy.rejectionReason = rejectionReason;
+        }
+
+        // Send email
+        try {
+            const vendor = await User.findById(pharmacy.owner);
+            
+            if (vendor) {
+                const emailContent = mailTemplates.adminApprovalEmail(
+                    vendor.firstName,
+                    'Pharmacy',
+                    approvalStatus,
+                    rejectionReason
+                );
+                
+                await mailSender(
+                    vendor.email,
+                    `Pharmacy Application ${approvalStatus.charAt(0).toUpperCase() + approvalStatus.slice(1)} - Swasthya Sarthi`,
+                    emailContent
+                );
+            }
+        } catch (emailError) {
+            console.error("Failed to send approval email:", emailError);
         }
 
         await pharmacy.save();
@@ -113,13 +130,6 @@ exports.updateVolunteerApproval = async (req, res) => {
         const { approvalStatus, rejectionReason } = req.body;
         const adminId = req.user.id;
 
-        if (!['approved', 'rejected'].includes(approvalStatus)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid approval status. Use 'approved' or 'rejected'"
-            });
-        }
-
         if (approvalStatus === 'rejected' && !rejectionReason) {
             return res.status(400).json({
                 success: false,
@@ -144,6 +154,28 @@ exports.updateVolunteerApproval = async (req, res) => {
         }
 
         await volunteer.save();
+
+        // Send volunteer approval email
+        try {
+            const user = await User.findById(volunteer.user);
+            
+            if (user) {
+                const emailContent = mailTemplates.adminApprovalEmail(
+                    user.firstName,
+                    'Volunteer',
+                    approvalStatus,
+                    rejectionReason
+                );
+                
+                await mailSender(
+                    user.email,
+                    `Volunteer Application ${approvalStatus.charAt(0).toUpperCase() + approvalStatus.slice(1)} - Swasthya Sarthi`,
+                    emailContent
+                );
+            }
+        } catch (emailError) {
+            console.error("Failed to send approval email:", emailError);
+        }
 
         const updatedVolunteer = await Volunteer.findById(volunteerId)
             .populate('user', 'firstName lastName email')
