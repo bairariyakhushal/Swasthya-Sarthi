@@ -6,8 +6,6 @@ const crypto = require("crypto");
 const mailSender = require("../utils/mailSender");
 const mailTemplates = require('../mail_templates/templates');
 
-console.log('Key ID:', process.env.RAZORPAY_KEY); // Remove this after debugging
-
 if (!process.env.RAZORPAY_KEY || !process.env.RAZORPAY_SECRET) {
     throw new Error('Razorpay credentials are not configured properly');
 }
