@@ -4,12 +4,36 @@ const User = require("../models/user");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const mailSender = require("../utils/mailSender");
+const mailTemplates = require('../mail_templates/templates');
 
 console.log('Key ID:', process.env.RAZORPAY_KEY); // Remove this after debugging
 
 if (!process.env.RAZORPAY_KEY || !process.env.RAZORPAY_SECRET) {
     throw new Error('Razorpay credentials are not configured properly');
 }
+
+// Helper function to calculate distance between two coordinates
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in kilometers
+}
+
+// Helper function to calculate delivery charges
+function calculateDeliveryCharges(distance) {
+    // Delivery charge structure
+    if (distance <= 2) return 20;        // ≤2km: ₹20
+    if (distance <= 5) return 30;        // 2-5km: ₹30
+    if (distance <= 10) return 50;       // 5-10km: ₹50
+    if (distance <= 15) return 70;       // 10-15km: ₹70
+    return Math.ceil(distance * 5);      // >15km: ₹5/km
+}
+
 
 
 // Initialize Razorpay
@@ -222,6 +246,29 @@ exports.verifyPayment = async (req, res) => {
         order.razorpaySignature = razorpay_signature;
         await order.save();
 
+        // Send order confirmation email
+        try {
+            const customer = await User.findById(order.customer);
+            const pharmacy = await Pharmacy.findById(order.pharmacy);
+            
+            if (customer && pharmacy) {
+                const emailContent = mailTemplates.orderConfirmationEmail(
+                    customer.firstName,
+                    order,
+                    pharmacy
+                );
+                
+                await mailSender(
+                    customer.email,
+                    "Order Confirmed - Swasthya Sarthi",
+                    emailContent
+                );
+                console.log("Order confirmation email sent to:", customer.email);
+            }
+        } catch (emailError) {
+            console.error("Failed to send confirmation email:", emailError);
+        }
+
         // Reduce pharmacy inventory
         const pharmacy = await Pharmacy.findById(order.pharmacy);
         for (const medicine of order.medicines) {
@@ -234,9 +281,6 @@ exports.verifyPayment = async (req, res) => {
         }
         await pharmacy.save();
 
-        const user = await User.findById(order.customer);
-        const emailBody = `Order Confirmed! Order ID: ${order._id}, Total: ₹${order.totalAmount}`;
-        await mailSender(user.email, "Order Confirmed", emailBody);
 
         const populatedOrder = await Order.findById(order._id)
             .populate('customer', 'firstName lastName email')
@@ -457,71 +501,6 @@ exports.cancelOrder = async (req, res) => {
         });
     }
 };
-
-// // Track order for customer
-// exports.trackOrder = async (req, res) => {
-//     try {
-//         const { orderId } = req.params;
-//         const customerId = req.user.id;
-
-//         const order = await Order.findOne({
-//             _id: orderId,
-//             customer: customerId
-//         })
-//             .populate('pharmacy', 'name address coordinates')
-//             .populate('volunteer', 'firstName lastName contactNumber currentLocation vehicleType vehicleNumber')
-//             .populate('vendor', 'firstName lastName contactNumber');
-
-//         if (!order) {
-//             return res.status(404).json({
-//                 success: false,
-//                 message: "Order not found"
-//             });
-//         }
-
-//         const trackingInfo = {
-//             orderId: order._id,
-//             orderStatus: order.orderStatus,
-//             paymentStatus: order.paymentStatus,
-//             medicines: order.medicines,
-//             pharmacy: order.pharmacy,
-//             deliveryAddress: order.deliveryAddress,
-//             deliveryDistance: order.deliveryDistance,
-//             deliveryCharges: order.deliveryCharges,
-//             totalAmount: order.totalAmount,
-//             timeline: {
-//                 orderPlaced: order.orderPlacedAt,
-//                 assigned: order.assignedAt,
-//                 pickedUp: order.pickedUpAt,
-//                 outForDelivery: order.outForDeliveryAt,
-//                 delivered: order.deliveredAt
-//             }
-//         };
-
-//         if (order.volunteer) {
-//             trackingInfo.volunteer = {
-//                 name: `${order.volunteer.firstName} ${order.volunteer.lastName}`,
-//                 contact: order.volunteer.contactNumber,
-//                 vehicleType: order.volunteer.vehicleType,
-//                 vehicleNumber: order.volunteer.vehicleNumber,
-//                 currentLocation: order.volunteer.currentLocation
-//             };
-//         }
-
-//         res.status(200).json({
-//             success: true,
-//             tracking: trackingInfo
-//         });
-
-//     } catch (error) {
-//         console.error("Track order error:", error);
-//         res.status(500).json({
-//             success: false,
-//             message: "Error tracking order",
-//             error: error.message
-//         });
-//     }
-// };
 
 // Update trackOrder function in controllers/order.js
 exports.trackOrder = async (req, res) => {
