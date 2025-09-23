@@ -35,7 +35,6 @@ function calculateDeliveryCharges(distance) {
 }
 
 
-
 // Initialize Razorpay
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY,
