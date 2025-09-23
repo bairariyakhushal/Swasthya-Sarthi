@@ -2,6 +2,8 @@ const Volunteer = require('../models/volunteer');
 const Order = require('../models/order');
 const User = require('../models/user');
 const Pharmacy = require('../models/pharmacy');
+const mailTemplates = require('../mail_templates/templates');
+const  mailSender  = require("../utils/mailSender");
 
 // Helper function to calculate distance
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -52,9 +54,9 @@ exports.getAvailableOrders = async (req, res) => {
             volunteer: { $exists: false },
             paymentStatus: 'completed'
         })
-        .populate('customer', 'firstName lastName contactNumber')
-        .populate('pharmacy', 'name address coordinates')
-        .sort({ createdAt: 1 });
+            .populate('customer', 'firstName lastName contactNumber')
+            .populate('pharmacy', 'name address coordinates')
+            .sort({ createdAt: 1 });
 
         console.log(`Found ${availableOrders.length} available orders`);
 
@@ -183,6 +185,29 @@ exports.acceptOrder = async (req, res) => {
         order.totalAmount = order.medicineTotal + deliveryCharges;
 
         await order.save();
+
+        // Send status update email
+        try {
+            const customer = await User.findById(order.customer);
+            const volunteer = await User.findById(userId);
+
+            if (customer) {
+                const emailContent = mailTemplates.orderStatusUpdateEmail(
+                    customer.firstName,
+                    order,
+                    'assigned',
+                    `Your order has been assigned to ${volunteer.firstName} ${volunteer.lastName} for delivery!`
+                );
+
+                await mailSender(
+                    customer.email,
+                    "Order Assigned - Swasthya Sarthi",
+                    emailContent
+                );
+            }
+        } catch (emailError) {
+            console.error("Failed to send assignment email:", emailError);
+        }
 
         // Add to volunteer's active orders
         volunteer.activeOrders.push(orderId);
@@ -314,6 +339,28 @@ exports.markDeliveryComplete = async (req, res) => {
         order.orderStatus = 'delivered';
         order.deliveredAt = new Date();
         await order.save();
+
+        // Send delivery confirmation email
+        try {
+            const customer = await User.findById(order.customer);
+
+            if (customer) {
+                const emailContent = mailTemplates.orderStatusUpdateEmail(
+                    customer.firstName,
+                    order,
+                    'delivered',
+                    'Your order has been delivered successfully! Thank you for choosing Swasthya Sarthi.'
+                );
+
+                await mailSender(
+                    customer.email,
+                    "Order Delivered - Swasthya Sarthi",
+                    emailContent
+                );
+            }
+        } catch (emailError) {
+            console.error("Failed to send delivery email:", emailError);
+        }
 
         // Update volunteer status
         const volunteer = await Volunteer.findOne({ user: userId });
