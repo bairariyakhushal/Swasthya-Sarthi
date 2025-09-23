@@ -8,13 +8,14 @@ const Volunteer = require("../models/volunteer");
 const Admin = require("../models/admin");
 const OTP = require("../models/otp");
 const mailSender = require("../utils/mailSender");
+const mailTemplates = require("../mail_templates/templates");
 
 require("dotenv").config();
 
 // Send OTP For Email Verification
 exports.sendOTP = async (req, res) => {
     try {
-        const { email } = req.body;
+        const { email, firstName } = req.body;
 
         // Check if user is already present
         const checkUserPresent = await User.findOne({ email });
@@ -38,18 +39,37 @@ exports.sendOTP = async (req, res) => {
         // Store OTP in database
         await OTP.create({ email, otp });
 
-        // Send OTP via email
-        const otpBody = `Your OTP for registration is: ${otp}`;
-        await mailSender(email, "OTP for Registration", otpBody);
+        if(firstName === undefined || firstName === null || firstName.trim() === ""){
+            firstName = "User";
+        }
+        // Send OTP via professional email template
+        try {
+            const emailContent = mailTemplates.otpVerificationEmail(firstName, otp);
+            await mailSender(
+                email,
+                "Email Verification - Swasthya Sarthi",
+                emailContent
+            );
+            console.log("OTP email sent successfully to:", email);
+        } catch (emailError) {
+            console.error("Failed to send OTP email:", emailError);
+            // Continue with response even if email fails
+        }
 
         res.status(200).json({
             success: true,
-            message: `OTP Sent Successfully`,
-            otp: otp
+            message: `OTP sent successfully to ${email}`,
+            otp:otp,
+            // Remove OTP from response in production
+            ...(process.env.NODE_ENV === 'development' && { otp: otp })
         });
     } catch (error) {
         console.log(error.message);
-        return res.status(500).json({ success: false, error: error.message });
+        return res.status(500).json({
+            success: false,
+            message: "Failed to send OTP",
+            error: error.message
+        });
     }
 };
 
@@ -140,7 +160,7 @@ exports.signup = async (req, res) => {
                 GSTIN,
                 licenseNumber,
             });
-        } 
+        }
         else if (accountType === "Volunteer") {
             if (!drivingLicense || !age || !vehicleType || !vehicleNumber || !city) {
                 return res.status(400).json({
@@ -148,7 +168,7 @@ exports.signup = async (req, res) => {
                     message: "All volunteer details required and age must be 18+",
                 });
             }
-            
+
             if (age < 18) {
                 return res.status(400).json({
                     success: false,
@@ -167,7 +187,7 @@ exports.signup = async (req, res) => {
                     radius: radius || 10
                 }
             });
-        } 
+        }
         else if (accountType === "Admin") {
             roleDocument = await Admin.create({
                 user: user._id,
@@ -176,6 +196,19 @@ exports.signup = async (req, res) => {
 
         // Remove password from response
         user.password = undefined;
+
+        // Send welcome email after successful registration
+        try {
+            const emailContent = mailTemplates.welcomeEmail(firstName, accountType);
+            await mailSender(
+                email,
+                ` Welcome to Swasthya Sarthi - ${accountType} Account Created!`,
+                emailContent
+            );
+            console.log("Welcome email sent successfully to:", email);
+        } catch (emailError) {
+            console.error("Failed to send welcome email:", emailError);
+        }
 
         return res.status(200).json({
             success: true,
@@ -228,7 +261,7 @@ exports.login = async (req, res) => {
             // Save token to user document in database
             user.token = token;
             user.password = undefined;
-            
+
             // Set cookie for token and return success response
             const options = {
                 expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
@@ -264,9 +297,9 @@ exports.changePassword = async (req, res) => {
         const isPasswordMatch = await bcrypt.compare(oldPassword, userDetails.password);
 
         if (!isPasswordMatch) {
-            return res.status(401).json({ 
-                success: false, 
-                message: "The password is incorrect" 
+            return res.status(401).json({
+                success: false,
+                message: "The password is incorrect"
             });
         }
 
@@ -290,9 +323,9 @@ exports.changePassword = async (req, res) => {
             });
         }
 
-        return res.status(200).json({ 
-            success: true, 
-            message: "Password updated successfully" 
+        return res.status(200).json({
+            success: true,
+            message: "Password updated successfully"
         });
     } catch (error) {
         console.error("Error occurred while updating password:", error);
