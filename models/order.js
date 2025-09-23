@@ -51,18 +51,12 @@ const orderSchema = new mongoose.Schema({
     volunteer: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: function() {
-            return this.deliveryType === 'delivery';
-        }
     },
     
     // Pricing
     medicineTotal: { type: Number , required: true },
     deliveryCharges: { 
-        type: Number, 
-        default: function() {
-            return this.deliveryType === 'pickup' ? 0 : undefined;
-        }
+        type: Number
     },
     totalAmount: { type: Number, required: true },
     
