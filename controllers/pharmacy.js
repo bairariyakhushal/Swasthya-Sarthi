@@ -2,17 +2,18 @@ const Pharmacy = require("../models/pharmacy");
 const Vendor = require("../models/vendor");
 const User = require("../models/user");
 const Order = require("../models/order");
-const { mailSender } = require("../utils/mailSender");
+const  mailSender  = require("../utils/mailSender");
+const mailTemplates = require('../mail_templates/templates');
 
 // Helper function to calculate distance between two coordinates
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth's radius in kilometers
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
         Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c; // Distance in kilometers
 }
 
@@ -20,22 +21,22 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 exports.getLocationCoordinates = async (req, res) => {
     try {
         const { address, city, state } = req.query;
-        
+
         if (!address && !city) {
             return res.status(400).json({ success: false, message: "Address or city required" });
         }
 
         const searchQuery = `${address || ''} ${city || ''} ${state || ''}`.trim();
-        
+
         // Use a geocoding service (Google Maps Geocoding API, OpenCage, etc.)
         // For demo purposes, I'll show how to integrate with OpenCage (free tier available)
-        
+
         const response = await fetch(
             `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(searchQuery)}&key=${process.env.OPENCAGE_API_KEY}&limit=5`
         );
-        
+
         const data = await response.json();
-        
+
         if (data.results && data.results.length > 0) {
             const results = data.results.map(result => ({
                 displayName: result.formatted,
@@ -45,15 +46,15 @@ exports.getLocationCoordinates = async (req, res) => {
                 state: result.components.state,
                 country: result.components.country
             }));
-            
-            res.status(200).json({ 
-                success: true, 
-                locations: results 
+
+            res.status(200).json({
+                success: true,
+                locations: results
             });
         } else {
-            res.status(404).json({ 
-                success: false, 
-                message: "Location not found" 
+            res.status(404).json({
+                success: false,
+                message: "Location not found"
             });
         }
     } catch (error) {
@@ -69,7 +70,7 @@ exports.registerPharmacy = async (req, res) => {
         const vendorId = req.user.id;
 
         // Validation
-        if (!name || !address || !longitude || !latitude || !licenseNumber || !contactNumber) {
+        if (!name || !address || !latitude || !longitude || !licenseNumber || !contactNumber) {
             return res.status(400).json({
                 success: false,
                 message: "All required fields must be provided"
@@ -106,7 +107,7 @@ exports.registerPharmacy = async (req, res) => {
         if (!vendor.pharmacies) {
             vendor.pharmacies = [];
         }
-        
+
         vendor.pharmacies.push(pharmacy._id);
         await vendor.save();
 
@@ -144,7 +145,7 @@ exports.updateInventory = async (req, res) => {
         }
 
         // Check if medicine already exists in inventory
-        const existingMedicineIndex = pharmacy.inventory.findIndex(med => 
+        const existingMedicineIndex = pharmacy.inventory.findIndex(med =>
             med.medicineName.toLowerCase() === medicineName.toLowerCase()
         );
 
@@ -165,10 +166,10 @@ exports.updateInventory = async (req, res) => {
 
         await pharmacy.save();
 
-        res.status(200).json({ 
-            success: true, 
-            message: "Inventory updated successfully", 
-            inventory: pharmacy.inventory 
+        res.status(200).json({
+            success: true,
+            message: "Inventory updated successfully",
+            inventory: pharmacy.inventory
         });
     } catch (error) {
         console.error(error);
@@ -181,11 +182,11 @@ exports.updateInventory = async (req, res) => {
 exports.searchMedicine = async (req, res) => {
     try {
         const { medicineName, latitude, longitude, radius = 3 } = req.body; // Use req.query for GET
-        
+
         if (!medicineName) {
-            return res.status(400).json({ 
-                success: false, 
-                message: "Medicine name is required" 
+            return res.status(400).json({
+                success: false,
+                message: "Medicine name is required"
             });
         }
 
@@ -196,11 +197,11 @@ exports.searchMedicine = async (req, res) => {
         if (latitude && longitude) {
             const searchLat = parseFloat(latitude);
             const searchLon = parseFloat(longitude);
-            
+
             if (isNaN(searchLat) || isNaN(searchLon)) {
-                return res.status(400).json({ 
-                    success: false, 
-                    message: "Valid latitude and longitude required" 
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid latitude and longitude required"
                 });
             }
 
@@ -213,15 +214,15 @@ exports.searchMedicine = async (req, res) => {
 
             // Calculate distances and filter
             const pharmaciesWithDistance = [];
-            
+
             for (const pharmacy of pharmacies) {
-                const medicine = pharmacy.inventory.find(m => 
+                const medicine = pharmacy.inventory.find(m =>
                     m.medicineName.toLowerCase().includes(medicineName.toLowerCase()) && m.stock > 0
                 );
 
                 if (medicine) {
                     const distance = calculateDistance(
-                        searchLat, searchLon, 
+                        searchLat, searchLon,
                         pharmacy.coordinates.latitude, pharmacy.coordinates.longitude
                     );
 
@@ -245,7 +246,7 @@ exports.searchMedicine = async (req, res) => {
 
             // Check if any pharmacy within radius
             const withinRadius = pharmaciesWithDistance.filter(p => p.distanceValue <= radius);
-            
+
             if (withinRadius.length > 0) {
                 result = withinRadius;
                 searchType = `within_${radius}km`;
@@ -256,7 +257,7 @@ exports.searchMedicine = async (req, res) => {
             }
 
             // Remove distanceValue from response
-            result = result.map(({distanceValue, ...pharmacy}) => pharmacy);
+            result = result.map(({ distanceValue, ...pharmacy }) => pharmacy);
         } else {
             // Global search without location
             const pharmacies = await Pharmacy.find({
@@ -266,7 +267,7 @@ exports.searchMedicine = async (req, res) => {
             }).populate('owner', 'firstName lastName contactNumber');
 
             result = pharmacies.map(pharmacy => {
-                const medicine = pharmacy.inventory.find(m => 
+                const medicine = pharmacy.inventory.find(m =>
                     m.medicineName.toLowerCase().includes(medicineName.toLowerCase()) && m.stock > 0
                 );
 
@@ -281,7 +282,7 @@ exports.searchMedicine = async (req, res) => {
                     ownerContact: pharmacy.owner.contactNumber
                 };
             });
-            
+
             searchType = "global_search";
         }
 
@@ -292,24 +293,24 @@ exports.searchMedicine = async (req, res) => {
             });
         }
 
-        res.status(200).json({ 
-            success: true, 
+        res.status(200).json({
+            success: true,
             searchType,
             totalResults: result.length,
-            message: result.length > 0 ? 
+            message: result.length > 0 ?
                 (searchType.includes('within') ? `Found ${result.length} pharmacy(ies) within ${radius}km` :
-                 searchType === 'nearest_available' ? `Medicine not found within ${radius}km. Showing nearest available pharmacies.` :
-                 `Found ${result.length} pharmacy(ies)`) :
+                    searchType === 'nearest_available' ? `Medicine not found within ${radius}km. Showing nearest available pharmacies.` :
+                        `Found ${result.length} pharmacy(ies)`) :
                 `No pharmacy found with ${medicineName}`,
-            pharmacies: result 
+            pharmacies: result
         });
 
     } catch (error) {
         console.error("Search medicine error:", error);
-        res.status(500).json({ 
-            success: false, 
-            message: "Error searching medicine", 
-            error: error.message 
+        res.status(500).json({
+            success: false,
+            message: "Error searching medicine",
+            error: error.message
         });
     }
 };
@@ -338,25 +339,27 @@ exports.markOrderReadyForPickup = async (req, res) => {
         order.readyForPickupAt = new Date();
         await order.save();
 
-        // Send notification to customer (email/SMS)
+        // Send pickup ready email
         try {
-            const emailBody = `
-                Your order is ready for pickup!
-                
-                Pickup Code: ${order.pickupCode}
-                Pharmacy: ${order.pharmacy.name}
-                Total Amount: ₹${order.totalAmount}
-                
-                Please visit the pharmacy with this pickup code.
-            `;
-            
-            await mailSender(
-                order.customer.email,
-                "Order Ready for Pickup",
-                emailBody
-            );
+            const customer = await User.findById(order.customer);
+            const pharmacy = await Pharmacy.findById(order.pharmacy);
+
+            if (customer && pharmacy) {
+                const emailContent = mailTemplates.pickupReadyEmail(
+                    customer.firstName,
+                    order,
+                    pharmacy
+                );
+
+                await mailSender(
+                    customer.email,
+                    "Order Ready for Pickup - Swasthya Sarthi",
+                    emailContent
+                );
+
+            }
         } catch (emailError) {
-            console.log("Email notification failed:", emailError);
+            console.error("Failed to send pickup ready email:", emailError);
         }
 
         res.status(200).json({
