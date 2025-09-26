@@ -436,3 +436,65 @@ exports.confirmCustomerPickup = async (req, res) => {
         });
     }
 };
+
+// Simple inventory view for vendor
+exports.getPharmacyInventory = async (req, res) => {
+    try {
+        const { pharmacyId } = req.params;
+        const vendorId = req.user.id;
+
+        // Check if pharmacy belongs to this vendor
+        const pharmacy = await Pharmacy.findOne({ 
+            _id: pharmacyId, 
+            owner: vendorId 
+        });
+
+        if (!pharmacy) {
+            return res.status(404).json({
+                success: false,
+                message: "Pharmacy not found or unauthorized access"
+            });
+        }
+
+        // Get all medicines with simple data
+        const inventory = pharmacy.inventory.map(medicine => ({
+            _id: medicine._id,
+            medicineName: medicine.medicineName,
+            sellingPrice: medicine.sellingPrice,
+            stock: medicine.stock,
+            totalValue: medicine.sellingPrice * medicine.stock
+        }));
+
+        // Calculate simple stats
+        const totalMedicines = inventory.length;
+        const inStock = inventory.filter(m => m.stock > 0).length;
+        const outOfStock = inventory.filter(m => m.stock === 0).length;
+        const totalInventoryValue = inventory.reduce((sum, m) => sum + m.totalValue, 0);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                pharmacy: {
+                    name: pharmacy.name,
+                    address: pharmacy.address
+                },
+                stats: {
+                    totalMedicines,
+                    inStock,
+                    outOfStock,
+                    totalInventoryValue: Math.round(totalInventoryValue)
+                },
+                inventory
+            },
+            message: "Inventory fetched successfully"
+        });
+
+    } catch (error) {
+        console.error("Get inventory error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Error fetching inventory",
+            error: error.message
+        });
+    }
+};
