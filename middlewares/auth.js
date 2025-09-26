@@ -66,7 +66,7 @@ exports.isAdmin = async (req, res, next) => {
 // Middleware for checking if user is Vendor
 exports.isVendor = async (req, res, next) => {
     try {
-        const userDetails = await User.findOne({ email: req.user.email });
+        const userDetails = await User.findOne({ email : req.user.email });
 
         if (userDetails.accountType !== "Vendor") {
             return res.status(401).json({
