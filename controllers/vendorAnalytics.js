@@ -70,8 +70,8 @@ const getPharmacyDashboard = async (req, res) => {
             sum + order.medicines.reduce((medSum, med) => medSum + med.quantity, 0), 0
         );
 
-        // Simple profit calculation (85% of revenue - 15% platform fee)
-        const netProfit = totalRevenue * 0.85;
+        // Assume a flat 25% profit margin for simplicity
+        const netProfit = totalRevenue * 0.25;
 
         res.status(200).json({
             success: true,
@@ -119,7 +119,7 @@ const getPharmacySalesReport = async (req, res) => {
             });
         }
 
-        // Get all orders (simple - no pagination)
+        // Get all orders for this pharmacy
         const orders = await Order.find({ pharmacy: pharmacyId })
             .populate('customer', 'firstName lastName')
             .sort({ createdAt: -1 });

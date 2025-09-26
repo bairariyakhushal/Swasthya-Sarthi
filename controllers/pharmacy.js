@@ -497,4 +497,4 @@ exports.getPharmacyInventory = async (req, res) => {
             error: error.message
         });
     }
-};
+}; 
