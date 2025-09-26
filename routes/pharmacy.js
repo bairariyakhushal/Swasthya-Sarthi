@@ -5,7 +5,8 @@ const { registerPharmacy,
     searchMedicine,
     getLocationCoordinates,
     markOrderReadyForPickup,      
-    confirmCustomerPickup
+    confirmCustomerPickup,
+    getPharmacyInventory
 } = require("../controllers/pharmacy");
 
 const { auth, isVendor } = require("../middlewares/auth");
@@ -26,5 +27,7 @@ router.post("/inventory/:pharmacyId", auth, isVendor, updateInventory);
 router.put("/order/:orderId/ready-for-pickup", auth, isVendor, markOrderReadyForPickup);
 router.put("/order/:orderId/confirm-pickup", auth, isVendor, confirmCustomerPickup);
 
+// Add this line after existing routes
+router.get("/:pharmacyId/inventory", auth, isVendor, getPharmacyInventory);
 
 module.exports = router;
