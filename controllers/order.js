@@ -5,9 +5,26 @@ const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const mailSender = require("../utils/mailSender");
 const mailTemplates = require('../mail_templates/templates');
+const cloudinary = require("cloudinary").v2;
 
 if (!process.env.RAZORPAY_KEY || !process.env.RAZORPAY_SECRET) {
     throw new Error('Razorpay credentials are not configured properly');
+}
+
+const SENSITIVE_MEDICINES = [
+    'antibiotics', 'antibiotic', 'amoxicillin', 'azithromycin', 'ciprofloxacin',
+    'insulin', 'metformin', 'warfarin', 'morphine', 'codeine', 'tramadol',
+    'diazepam', 'lorazepam', 'alprazolam', 'cough syrup with codeine'
+];
+
+
+// Helper function to check if any medicine requires prescription
+function checkIfPrescriptionRequired(medicines) {
+    return medicines.some(medicine => {
+        return SENSITIVE_MEDICINES.some(sensitive =>
+            medicine.medicineName.toLowerCase().includes(sensitive.toLowerCase())
+        );
+    });
 }
 
 // Helper function to calculate distance between two coordinates
@@ -15,10 +32,10 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth's radius in kilometers
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
         Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c; // Distance in kilometers
 }
 
@@ -78,17 +95,65 @@ const validateAndCalculateOrder = async (pharmacyId, medicines) => {
     return { pharmacy, orderMedicines, totalAmount };
 };
 
+// Helper function to parse medicines from different formats
+function parseMedicinesFromRequest(req) {
+    let medicines = [];
+    
+    // Method 1: If medicines is already an array (direct API call)
+    if (Array.isArray(req.body.medicines)) {
+        medicines = req.body.medicines;
+    }
+    // Method 2: If medicines is a JSON string (form-data)
+    else if (req.body.medicines && typeof req.body.medicines === 'string') {
+        try {
+            medicines = JSON.parse(req.body.medicines);
+        } catch (e) {
+            throw new Error("Invalid medicines format. Please provide valid JSON array.");
+        }
+    }
+    // Method 3: If no medicines found
+    else {
+        throw new Error("Medicines array is required");
+    }
+
+    // Validate that it's actually an array
+    if (!Array.isArray(medicines)) {
+        throw new Error("Medicines must be an array");
+    }
+
+    return medicines;
+}
+
 // Step 1: Create Razorpay Order (before placing actual order)
 exports.createPaymentOrder = async (req, res) => {
     try {
+        // Check file using express-fileupload format
+        console.log("Files:", req.files);
+
+        let prescriptionFile = null;
+        if (req.files && req.files.file) {
+            prescriptionFile = req.files.file;
+            console.log("Prescription file found:", prescriptionFile.name);
+        }
+
         const {
             pharmacyId,
-            medicines,
-            deliveryType,           // NEW FIELD
+            deliveryType,
             deliveryAddress,        // Optional for pickup
             contactNumber,
-            deliveryCoordinates     // Optional for pickup
+            deliveryCoordinates,    // Optional for pickup
         } = req.body;
+
+        // Parse medicines from request (FIXED)
+        let medicines;
+        try {
+            medicines = parseMedicinesFromRequest(req);
+        } catch (parseError) {
+            return res.status(400).json({
+                success: false,
+                message: parseError.message
+            });
+        }
 
         const userId = req.user.id;
 
@@ -117,6 +182,23 @@ exports.createPaymentOrder = async (req, res) => {
             }
         }
 
+        // Check if any medicine needs prescription
+        const needsPrescription = checkIfPrescriptionRequired(medicines);
+
+        // If prescription needed but not uploaded
+        if (needsPrescription && !prescriptionFile) {
+            return res.status(400).json({
+                success: false,
+                message: "Prescription image required for sensitive medicines",
+                needsPrescription: true,
+                sensitiveMedicines: medicines.filter(m =>
+                    SENSITIVE_MEDICINES.some(s =>
+                        m.medicineName.toLowerCase().includes(s.toLowerCase())
+                    )
+                ).map(m => m.medicineName)
+            });
+        }
+
         // Validate and calculate order
         const { pharmacy, orderMedicines, totalAmount } = await validateAndCalculateOrder(pharmacyId, medicines);
 
@@ -132,6 +214,15 @@ exports.createPaymentOrder = async (req, res) => {
             );
             deliveryCharges = calculateDeliveryCharges(distance);
             finalAmount = totalAmount + deliveryCharges;
+        }
+
+        // Upload prescription if provided
+        let prescriptionUrl = null;
+        if (prescriptionFile) {
+            const uploadResult = await cloudinary.uploader.upload(prescriptionFile.tempFilePath, {
+                folder: "Swasthy Sarthi"
+            });
+            prescriptionUrl = uploadResult.secure_url;
         }
 
         // Generate pickup code for in-store pickup
@@ -163,10 +254,16 @@ exports.createPaymentOrder = async (req, res) => {
             deliveryCharges: deliveryCharges,
             totalAmount: finalAmount,
             contactNumber: contactNumber,
-            orderStatus: 'pending',
+            orderStatus: needsPrescription ? 'pending' : 'pending',
             paymentStatus: 'pending',
             razorpayOrderId: razorpayOrder.id,
             orderPlacedAt: new Date(),
+
+            // Prescription fields
+            needsPrescription: needsPrescription,
+            prescriptionImage: prescriptionUrl,
+            prescriptionStatus: needsPrescription ? 'pending' : null,
+
 
             // Conditional fields
             ...(deliveryType === 'delivery' && {
@@ -182,8 +279,9 @@ exports.createPaymentOrder = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: `${deliveryType === 'delivery' ? 'Delivery' : 'Pickup'} order created, proceed to payment`,
-            orderId: order._id,
+            message: needsPrescription ?
+                "Order created - waiting for prescription verification" :
+                "Order created - proceed to payment", orderId: order._id,
             razorpayOrderId: razorpayOrder.id,
             amount: finalAmount,
             deliveryType: deliveryType,
@@ -191,7 +289,10 @@ exports.createPaymentOrder = async (req, res) => {
             pickupCode: pickupCode, // Only for pickup orders
             key: process.env.RAZORPAY_KEY,
             pharmacyName: pharmacy.name,
-            medicines: orderMedicines
+            medicines: orderMedicines,
+            needsPrescription,
+            prescriptionUrl,
+            prescriptionStatus: needsPrescription ? 'pending_verification' : 'not_required',
         });
 
     } catch (error) {
@@ -247,14 +348,14 @@ exports.verifyPayment = async (req, res) => {
         try {
             const customer = await User.findById(order.customer);
             const pharmacy = await Pharmacy.findById(order.pharmacy);
-            
+
             if (customer && pharmacy) {
                 const emailContent = mailTemplates.orderConfirmationEmail(
                     customer.firstName,
                     order,
                     pharmacy
                 );
-                
+
                 await mailSender(
                     customer.email,
                     "Order Confirmed - Swasthya Sarthi",
@@ -304,12 +405,22 @@ exports.verifyPayment = async (req, res) => {
 exports.getUserOrders = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { status } = req.query;
+        
+        // Get status from query parameter OR URL parameter (both supported)
+        const status = req.params.status || req.query.status;
 
-        let filter = { customer: userId };
-        if (status) {
+        console.log("Customer ID:", userId);
+        console.log("Requested Status:", status);
+
+        // Build filter - vendor ke orders
+        let filter = { customer : userId };
+        
+        // Add status filter only if provided and not 'all'
+        if (status && status !== 'all') {
             filter.orderStatus = status;
         }
+
+        console.log("Filter:", filter);
 
         const orders = await Order.find(filter)
             .populate('pharmacy', 'name address')
@@ -319,6 +430,7 @@ exports.getUserOrders = async (req, res) => {
         res.status(200).json({
             success: true,
             totalOrders: orders.length,
+            requestedStatus: status || 'all',
             orders: orders
         });
 
@@ -370,12 +482,22 @@ exports.getOrderDetails = async (req, res) => {
 exports.getVendorOrders = async (req, res) => {
     try {
         const vendorId = req.user.id;
-        const { status } = req.query;
+        
+        // Get status from query parameter OR URL parameter (both supported)
+        const status = req.params.status || req.query.status;
+        
+        console.log("Vendor ID:", vendorId);
+        console.log("Requested Status:", status);
 
+        // Build filter - vendor ke orders
         let filter = { vendor: vendorId };
-        if (status) {
+        
+        // Add status filter only if provided and not 'all'
+        if (status && status !== 'all') {
             filter.orderStatus = status;
         }
+
+        console.log("Filter:", filter);
 
         const orders = await Order.find(filter)
             .populate('customer', 'firstName lastName email contactNumber')
@@ -386,6 +508,7 @@ exports.getVendorOrders = async (req, res) => {
         res.status(200).json({
             success: true,
             totalOrders: orders.length,
+            requestedStatus: status || 'all',
             orders: orders
         });
 
@@ -520,7 +643,7 @@ exports.trackOrder = async (req, res) => {
             });
         }
 
-         console.log('Order Pharmacy:', order.pharmacy);
+        console.log('Order Pharmacy:', order.pharmacy);
 
         // Calculate progress percentage
         const statusProgress = {
@@ -647,6 +770,83 @@ exports.trackOrder = async (req, res) => {
             success: false,
             message: "Error tracking order",
             error: error.message
+        });
+    }
+};
+
+// Verify prescription (vendor only)
+exports.verifyPrescription = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const { action, reason } = req.body; // action: 'approve' or 'reject'
+        const vendorId = req.user.id;
+
+        // Find order and verify vendor ownership
+        const order = await Order.findById(orderId)
+            .populate('pharmacy', 'owner')
+            .populate('customer', 'firstName lastName email');
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: "Order not found"
+            });
+        }
+
+        if (order.pharmacy.owner.toString() !== vendorId) {
+            return res.status(403).json({
+                success: false,
+                message: "Unauthorized access"
+            });
+        }
+
+        if (!order.needsPrescription) {
+            return res.status(400).json({
+                success: false,
+                message: "This order doesn't need prescription"
+            });
+        }
+
+        if (order.prescriptionStatus !== 'pending') {
+            return res.status(400).json({
+                success: false,
+                message: "Prescription already verified"
+            });
+        }
+
+        // Update prescription status
+        if (action === 'approve') {
+            order.prescriptionStatus = 'approved';
+            order.orderStatus = 'pending'; // Move to regular order flow
+        } else if (action === 'reject') {
+            order.prescriptionStatus = 'rejected';
+            order.orderStatus = 'cancelled';
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: "Action must be 'approve' or 'reject'"
+            });
+        }
+
+        order.prescriptionNote = reason;
+        await order.save();
+
+        res.status(200).json({
+            success: true,
+            data: {
+                orderId: order._id,
+                action,
+                prescriptionStatus: order.prescriptionStatus,
+                orderStatus: order.orderStatus,
+                customerName: `${order.customer.firstName} ${order.customer.lastName}`
+            },
+            message: `Prescription ${action}d successfully`
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Error verifying prescription"
         });
     }
 };
