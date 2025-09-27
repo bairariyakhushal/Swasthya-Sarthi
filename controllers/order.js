@@ -485,12 +485,36 @@ exports.getVendorOrders = async (req, res) => {
         
         // Get status from query parameter OR URL parameter (both supported)
         const status = req.params.status || req.query.status;
-        
+        const pharmacyId = req.params.pharmacyId || req.query.pharmacyId;
+
         console.log("Vendor ID:", vendorId);
+        console.log("Pharmacy ID:", pharmacyId);
         console.log("Requested Status:", status);
 
-        // Build filter - vendor ke orders
-        let filter = { vendor: vendorId };
+        // Build filter
+        let filter = {};
+        
+        if (pharmacyId) {
+            // Specific pharmacy orders
+            filter.pharmacy = pharmacyId;
+            
+            // Verify pharmacy belongs to this vendor
+            const pharmacy = await Pharmacy.findOne({ 
+                _id: pharmacyId, 
+                owner: vendorId 
+            });
+            
+            if (!pharmacy) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Pharmacy not found or access denied"
+                });
+            }
+        } else {
+            // All vendor's pharmacies orders
+            const vendorPharmacies = await Pharmacy.find({ owner: vendorId }).select('_id');
+            filter.pharmacy = { $in: vendorPharmacies.map(p => p._id) };
+        }
         
         // Add status filter only if provided and not 'all'
         if (status && status !== 'all') {
