@@ -26,8 +26,10 @@ router.put("/cancel/:orderId", auth, cancelOrder);
 router.get("/track/:orderId", auth, trackOrder);
 
 // Vendor routes
-router.get("/vendor/orders", auth, isVendor, getVendorOrders);
-router.get("/vendor/orders/:status", auth, isVendor, getVendorOrders); // Status-wise orders
+router.get("/vendor/orders", auth, isVendor, getVendorOrders); // All pharmacies
+router.get("/vendor/orders/:status", auth, isVendor, getVendorOrders); // All pharmacies by status
+router.get("/vendor/pharmacy/:pharmacyId/orders", auth, isVendor, getVendorOrders); // Specific pharmacy
+router.get("/vendor/pharmacy/:pharmacyId/orders/:status", auth, isVendor, getVendorOrders); // Specific pharmacy by status
 router.put("/vendor/status/:orderId", auth, isVendor, updateOrderStatus);
 router.put("/verify-prescription/:orderId", auth, isVendor, verifyPrescription);
 
