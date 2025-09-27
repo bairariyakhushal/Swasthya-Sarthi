@@ -43,6 +43,7 @@ const orderRoutes = require("./routes/order");
 const adminRoutes = require("./routes/admin");
 const volunteerRoutes = require("./routes/volunteer");
 const vendorAnalyticsRoutes = require("./routes/vendorAnalytics");
+const aiRoutes = require("./routes/ai");
 
 // Routes
 app.use("/api/v1/auth", authRoutes);
@@ -51,6 +52,7 @@ app.use("/api/v1/order", orderRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/volunteer", volunteerRoutes);
 app.use("/api/v1/vendor", vendorAnalyticsRoutes);
+app.use("/api/v1/ai", aiRoutes);
 
 // Testing the server
 app.get("/", (req, res) => {
