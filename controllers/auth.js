@@ -15,7 +15,7 @@ require("dotenv").config();
 // Send OTP For Email Verification
 exports.sendOTP = async (req, res) => {
     try {
-        const { email, firstName } = req.body;
+        let { email, firstName } = req.body;
 
         // Check if user is already present
         const checkUserPresent = await User.findOne({ email });
