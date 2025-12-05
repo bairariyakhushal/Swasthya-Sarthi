@@ -6,7 +6,8 @@ const { registerPharmacy,
     getLocationCoordinates,
     markOrderReadyForPickup,      
     confirmCustomerPickup,
-    getPharmacyInventory
+    getPharmacyInventory,
+    getNearestPharmacies
 } = require("../controllers/pharmacy");
 
 const { auth, isVendor } = require("../middlewares/auth");
@@ -27,7 +28,10 @@ router.post("/inventory/:pharmacyId", auth, isVendor, updateInventory);
 router.put("/order/:orderId/ready-for-pickup", auth, isVendor, markOrderReadyForPickup);
 router.put("/order/:orderId/confirm-pickup", auth, isVendor, confirmCustomerPickup);
 
-// Add this line after existing routes
+//  Get pharmacy inventory details
 router.get("/:pharmacyId/inventory", auth, isVendor, getPharmacyInventory);
+
+// Nearest pharmacy search based on user location
+router.get("/nearest", auth, getNearestPharmacies);
 
 module.exports = router;
