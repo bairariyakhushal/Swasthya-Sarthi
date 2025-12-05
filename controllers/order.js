@@ -131,8 +131,8 @@ exports.createPaymentOrder = async (req, res) => {
         console.log("Files:", req.files);
 
         let prescriptionFile = null;
-        if (req.files && req.files.file) {
-            prescriptionFile = req.files.file;
+        if (req.files && (req.files.file || req.files.prescriptionImage)) {
+            prescriptionFile =req.files.file || req.files.prescriptionImage;
             console.log("Prescription file found:", prescriptionFile.name);
         }
 
@@ -141,8 +141,38 @@ exports.createPaymentOrder = async (req, res) => {
             deliveryType,
             deliveryAddress,        // Optional for pickup
             contactNumber,
-            deliveryCoordinates,    // Optional for pickup
         } = req.body;
+
+        // FIXED: Parse deliveryCoordinates from string to object
+        let deliveryCoordinates = null;
+        if (req.body.deliveryCoordinates) {
+            try {
+                // Parse if string
+                const coordsData = typeof req.body.deliveryCoordinates === 'string' 
+                    ? JSON.parse(req.body.deliveryCoordinates) 
+                    : req.body.deliveryCoordinates;
+                
+                // Extract and convert to numbers
+                const lat = parseFloat(coordsData.latitude);
+                const lng = parseFloat(coordsData.longitude);
+                
+                console.log("Parsed Latitude:", lat);
+                console.log("Parsed Longitude:", lng);
+                
+                // Validate
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    deliveryCoordinates = {
+                        latitude: lat,
+                        longitude: lng
+                    };
+                    console.log("Valid Delivery Coordinates:", deliveryCoordinates);
+                } else {
+                    console.error("Invalid coordinate values");
+                }
+            } catch (e) {
+                console.error("Error parsing coordinates:", e.message);
+            }
+        }
 
         // Parse medicines from request (FIXED)
         let medicines;
@@ -215,6 +245,11 @@ exports.createPaymentOrder = async (req, res) => {
             deliveryCharges = calculateDeliveryCharges(distance);
             finalAmount = totalAmount + deliveryCharges;
         }
+
+        console.log("Medicine Total:", totalAmount);
+        console.log("Delivery Charges:", deliveryCharges);
+        console.log("Final Amount:", finalAmount);
+        console.log("Amount in Paise:", finalAmount * 100);
 
         // Upload prescription if provided
         let prescriptionUrl = null;
