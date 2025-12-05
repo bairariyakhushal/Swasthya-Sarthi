@@ -59,7 +59,8 @@ exports.getAvailableOrders = async (req, res) => {
             .sort({ createdAt: 1 });
 
         console.log(`Found ${availableOrders.length} available orders`);
-
+        console.log(availableOrders)
+        
         // Process orders
         const ordersWithDetails = availableOrders
             .filter(order => {
@@ -109,6 +110,7 @@ exports.getAvailableOrders = async (req, res) => {
             })
             .filter(order => order.distance <= volunteer.serviceArea.radius);
 
+        console.log(ordersWithDetails);
         console.log(`Returning ${ordersWithDetails.length} orders within service area`);
 
         res.status(200).json({
