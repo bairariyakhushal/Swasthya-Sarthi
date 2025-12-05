@@ -498,3 +498,108 @@ exports.getPharmacyInventory = async (req, res) => {
         });
     }
 }; 
+
+
+// Get nearest pharmacies based on user coordinates
+exports.getNearestPharmacies = async (req, res) => {
+    try {
+        const { latitude, longitude, radius = 10 } = req.body;
+
+        // Validation
+        if (!latitude || !longitude) {
+            return res.status(400).json({
+                success: false,
+                message: "Latitude and longitude are required"
+            });
+        }
+
+        const userLat = parseFloat(latitude);
+        const userLon = parseFloat(longitude);
+
+        if (isNaN(userLat) || isNaN(userLon)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid latitude or longitude"
+            });
+        }
+
+        // Find all approved pharmacies
+        const pharmacies = await Pharmacy.find({
+            approvalStatus: 'approved'
+        }).populate('owner', 'firstName lastName contactNumber email');
+
+        if (pharmacies.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "No pharmacies found"
+            });
+        }
+
+        // Calculate distance for each pharmacy
+        const pharmaciesWithDistance = pharmacies.map(pharmacy => {
+            const distance = calculateDistance(
+                userLat,
+                userLon,
+                pharmacy.coordinates.latitude,
+                pharmacy.coordinates.longitude
+            );
+
+            return {
+                pharmacyId: pharmacy._id,
+                pharmacyName: pharmacy.name,
+                address: pharmacy.address,
+                coordinates: {
+                    latitude: pharmacy.coordinates.latitude,
+                    longitude: pharmacy.coordinates.longitude
+                },
+                distance: parseFloat(distance.toFixed(2)), // Distance in km
+                contactNumber: pharmacy.contactNumber,
+                owner: {
+                    name: `${pharmacy.owner.firstName} ${pharmacy.owner.lastName}`,
+                    contact: pharmacy.owner.contactNumber,
+                    email: pharmacy.owner.email
+                },
+                licenseNumber: pharmacy.licenseNumber,
+                totalMedicines: pharmacy.inventory.length,
+                availableMedicines: pharmacy.inventory.filter(m => m.stock > 0).length
+            };
+        });
+
+        // Sort by distance (increasing order)
+        pharmaciesWithDistance.sort((a, b) => a.distance - b.distance);
+
+        // Filter by radius if specified
+        const filteredPharmacies = radius 
+            ? pharmaciesWithDistance.filter(p => p.distance <= parseFloat(radius))
+            : pharmaciesWithDistance;
+
+        if (filteredPharmacies.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: `No pharmacies found within ${radius}km. Showing nearest pharmacies instead.`,
+                totalResults: Math.min(5, pharmaciesWithDistance.length),
+                pharmacies: pharmaciesWithDistance.slice(0, 5) // Show nearest 5
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Found ${filteredPharmacies.length} pharmacy(ies)`,
+            totalResults: filteredPharmacies.length,
+            searchRadius: `${radius} km`,
+            userLocation: {
+                latitude: userLat,
+                longitude: userLon
+            },
+            pharmacies: filteredPharmacies
+        });
+
+    } catch (error) {
+        console.error("Get nearest pharmacies error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Error fetching nearest pharmacies",
+            error: error.message
+        });
+    }
+};
