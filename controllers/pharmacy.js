@@ -4,6 +4,7 @@ const User = require("../models/user");
 const Order = require("../models/order");
 const  mailSender  = require("../utils/mailSender");
 const mailTemplates = require('../mail_templates/templates');
+const {uploadToClodinary}  = require("../utils/uploader");
 
 // Helper function to calculate distance between two coordinates
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -144,6 +145,34 @@ exports.updateInventory = async (req, res) => {
             return res.status(404).json({ success: false, message: "Pharmacy not found or unauthorized" });
         }
 
+        let medicineImageUrl = null;
+
+        // Upload medicine image if provided
+        if (req.files && req.files.medicineImage) {
+            const medicineImage = req.files.medicineImage;
+            
+            // Validate image
+            const supportedTypes = ["jpg", "jpeg", "png", "webp"];
+            const fileType = medicineImage.name.split('.').pop().toLowerCase();
+
+            if (!supportedTypes.includes(fileType)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Only JPG, JPEG, PNG, WEBP images are allowed"
+                });
+            }
+
+            // Upload to cloudinary
+            const uploadedImage = await uploadToClodinary(
+                medicineImage,
+                process.env.FOLDER_NAME || "Swasthya_Sarthi/medicines",
+                1000,
+                1000
+            );
+
+            medicineImageUrl = uploadedImage.secure_url;
+        }
+
         // Check if medicine already exists in inventory
         const existingMedicineIndex = pharmacy.inventory.findIndex(med =>
             med.medicineName.toLowerCase() === medicineName.toLowerCase()
@@ -154,13 +183,18 @@ exports.updateInventory = async (req, res) => {
             pharmacy.inventory[existingMedicineIndex].sellingPrice = sellingPrice;
             pharmacy.inventory[existingMedicineIndex].stock = stock;
             if (purchasePrice) pharmacy.inventory[existingMedicineIndex].purchasePrice = purchasePrice;
+            // ✅ Update image if new image provided
+            if (medicineImageUrl) {
+                pharmacy.inventory[existingMedicineIndex].medicineImage = medicineImageUrl;
+            }
         } else {
             // Add new medicine
             pharmacy.inventory.push({
                 medicineName,
                 sellingPrice,
                 stock,
-                purchasePrice: purchasePrice || 0
+                purchasePrice: purchasePrice || 0,
+                medicineImage: medicineImageUrl || null
             });
         }
 
@@ -228,10 +262,12 @@ exports.searchMedicine = async (req, res) => {
 
                     pharmaciesWithDistance.push({
                         pharmacyId: pharmacy._id,
-                        pharmacyName: pharmacy.name,
+                        pharmacyName: pharmacy.name, 
                         address: pharmacy.address,
                         medicineName: medicine.medicineName,
+                        medicineImage: medicine.medicineImage || null,
                         price: medicine.sellingPrice,
+                        stock: medicine.stock,
                         isAvailable: true,
                         distance: `${distance.toFixed(1)} km`,
                         distanceValue: distance,
@@ -276,7 +312,9 @@ exports.searchMedicine = async (req, res) => {
                     pharmacyName: pharmacy.name,
                     address: pharmacy.address,
                     medicineName: medicine.medicineName,
+                    medicineImage: medicine.medicineImage || null,
                     price: medicine.sellingPrice,
+                    stock: medicine.stock,
                     isAvailable: true,
                     ownerName: `${pharmacy.owner.firstName} ${pharmacy.owner.lastName}`,
                     ownerContact: pharmacy.owner.contactNumber
@@ -460,6 +498,7 @@ exports.getPharmacyInventory = async (req, res) => {
         const inventory = pharmacy.inventory.map(medicine => ({
             _id: medicine._id,
             medicineName: medicine.medicineName,
+            medicineImage: medicine.medicineImage || null,
             sellingPrice: medicine.sellingPrice,
             stock: medicine.stock,
             totalValue: medicine.sellingPrice * medicine.stock
