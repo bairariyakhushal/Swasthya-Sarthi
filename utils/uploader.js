@@ -4,7 +4,7 @@ exports.uploadToClodinary = async (file,folder,height,quality) => {
     const options={folder};
 
     if(height){
-        options.height=innerHeight;
+        options.height=height;
     }
 
     if(quality){
