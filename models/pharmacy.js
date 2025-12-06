@@ -41,7 +41,12 @@ const pharmacySchema = new mongoose.Schema({
             purchasePrice: {
                 type: Number,
                 required: true
-            }
+            },
+            medicineImage: {
+                type: String,
+                default: null
+            }, // Image URL
+            addedAt: { type: Date, default: Date.now }
         }
     ],
     // Admin approval fields
