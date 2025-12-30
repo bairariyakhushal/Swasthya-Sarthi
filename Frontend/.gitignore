@@ -1,0 +1,76 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+dist
+dist-ssr
+*.local
+
+# Build outputs
+build
+.cache
+.parcel-cache
+.vite
+coverage
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+.env.admin
+
+# Admin access files (CONFIDENTIAL)
+ADMIN_ACCESS.md
+ADMIN_REGISTRATION.md
+.admin-*
+
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+.cache
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Debug files
+debug.log
+*.pid
+*.seed
+*.pid.lock
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+.eslintcache

@@ -1,0 +1,26 @@
+{
+  "name": "swasthya-sarthi",
+  "version": "1.0.0",
+  "description": "Swasthya Sarthi - Healthcare Platform",
+  "main": "index.js",
+  "scripts": {
+    "install-all": "npm install && cd Backend && npm install && cd ../Frontend && npm install",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd Backend && npm run dev",
+    "client": "cd Frontend && npm run dev",
+    "start": "concurrently \"npm run server:prod\" \"npm run client:preview\"",
+    "server:prod": "cd Backend && npm start",
+    "client:preview": "cd Frontend && npm run preview",
+    "build": "cd Frontend && npm run build"
+  },
+  "keywords": [
+    "healthcare",
+    "pharmacy",
+    "medicine"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
