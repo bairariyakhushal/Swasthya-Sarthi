@@ -33,8 +33,8 @@ exports.sendOTP = async (req, res) => {
             specialChars: false,
         });
 
-
-        console.log("OTP Generated: ", otp);
+        // OTP log kar do testing ke liye
+        console.log("📧 OTP for testing:", otp);
 
         // Store OTP in database
         await OTP.create({ email, otp });
