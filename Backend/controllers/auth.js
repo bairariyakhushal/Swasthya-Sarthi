@@ -42,26 +42,29 @@ exports.sendOTP = async (req, res) => {
         if(firstName === undefined || firstName === null || firstName.trim() === ""){
             firstName = "User";
         }
-        // Send OTP via professional email template
-        try {
-            const emailContent = mailTemplates.otpVerificationEmail(firstName, otp);
-            await mailSender(
-                email,
-                "Email Verification - Swasthya Sarthi",
-                emailContent
-            );
-            console.log("OTP email sent successfully to:", email);
-        } catch (emailError) {
-            console.error("Failed to send OTP email:", emailError);
-            // Continue with response even if email fails
-        }
 
+        // Send response immediately (don't wait for email)
         res.status(200).json({
             success: true,
             message: `OTP sent successfully to ${email}`,
             otp:otp,
             // Remove OTP from response in production
             ...(process.env.NODE_ENV === 'development' && { otp: otp })
+        });
+
+        // Send OTP email asynchronously in background (non-blocking)
+        setImmediate(async () => {
+            try {
+                const emailContent = mailTemplates.otpVerificationEmail(firstName, otp);
+                await mailSender(
+                    email,
+                    "Email Verification - Swasthya Sarthi",
+                    emailContent
+                );
+                console.log("✅ OTP email sent successfully to:", email);
+            } catch (emailError) {
+                console.error("❌ Failed to send OTP email:", emailError.message);
+            }
         });
     } catch (error) {
         console.log(error.message);
