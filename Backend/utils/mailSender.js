@@ -5,8 +5,8 @@ const mailSender = async (email, title, body) => {
     try {
         let transporter = nodemailer.createTransport({
             host: process.env.MAIL_HOST,
-            port: 465, // Gmail SMTP port for SSL
-            secure: true, // Use SSL
+            port: 587, // Gmail SMTP port for SSL
+            secure: false, // Use SSL
             auth: {
                 user: process.env.MAIL_USER,
                 pass: process.env.MAIL_PASS
