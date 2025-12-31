@@ -200,7 +200,7 @@ exports.acceptOrder = async (req, res) => {
             .populate('customer', 'firstName lastName')
             .populate('pharmacy', 'name address');
 
-        // Send response first
+        // Send response FIRST (don't wait for email)
         res.status(200).json({
             success: true,
             message: "Order accepted successfully",
@@ -212,47 +212,34 @@ exports.acceptOrder = async (req, res) => {
             }
         });
 
-        console.log("=== AFTER RESPONSE SENT ===");
-        console.log("📧 Starting email process for order assignment");
-        console.log("📧 Order customer ID:", order.customer);
-        console.log("📧 Volunteer user ID:", userId);
-        
-        // Send email immediately (not in setTimeout)
-        try {
-            console.log("🔍 Finding customer...");
-            const customer = await User.findById(order.customer);
-            const volunteerUser = await User.findById(userId);
-            
-            console.log("✅ Customer found:", customer ? customer.email : 'NOT FOUND');
-            console.log("✅ Volunteer found:", volunteerUser ? volunteerUser.firstName : 'NOT FOUND');
-            
-            if (customer && volunteerUser) {
-                console.log("📝 Generating email content...");
-                const emailContent = mailTemplates.orderStatusUpdateEmail(
-                    customer.firstName,
-                    order,
-                    'assigned',
-                    `Your order has been assigned to ${volunteerUser.firstName} ${volunteerUser.lastName} for delivery!`
-                );
-                console.log("📝 Email content generated");
-                console.log("📧 Calling mailSender...");
+        // Send email in background (fire and forget - don't block)
+        setImmediate(async () => {
+            try {
+                console.log("📧 [Background] Sending order assignment email...");
+                const customer = await User.findById(order.customer);
+                const volunteerUser = await User.findById(userId);
                 
-                const result = await mailSender(
-                    customer.email,
-                    "Order Assigned - Swasthya Sarthi",
-                    emailContent
-                );
-                
-                console.log("✅ mailSender completed, result:", result ? "SUCCESS" : "FAILED");
-            } else {
-                console.log("❌ Customer or volunteer not found");
-                console.log("  - Customer:", customer ? "FOUND" : "NOT FOUND");
-                console.log("  - Volunteer:", volunteerUser ? "FOUND" : "NOT FOUND");
+                if (customer && volunteerUser) {
+                    const emailContent = mailTemplates.orderStatusUpdateEmail(
+                        customer.firstName,
+                        order,
+                        'assigned',
+                        `Your order has been assigned to ${volunteerUser.firstName} ${volunteerUser.lastName} for delivery!`
+                    );
+                    
+                    await mailSender(
+                        customer.email,
+                        "Order Assigned - Swasthya Sarthi",
+                        emailContent
+                    );
+                    console.log("✅ Assignment email sent to:", customer.email);
+                } else {
+                    console.log("❌ Customer or volunteer not found for email");
+                }
+            } catch (err) {
+                console.error("❌ Email error (non-blocking):", err.message);
             }
-        } catch (err) {
-            console.error("❌ Email error:", err.message);
-            console.error("❌ Full error:", err);
-        }
+        });
 
     } catch (error) {
         console.error("Accept order error:", error);
@@ -296,43 +283,37 @@ exports.markPickupComplete = async (req, res) => {
         order.pickedUpAt = new Date();
         await order.save();
 
-        // Send email BEFORE response
-        try {
-            console.log("==========================================");
-            console.log("🔔 PICKUP COMPLETE - Sending email...");
-            console.log("Order ID:", order._id);
-            console.log("Customer ID:", order.customer);
-            
-            const customer = await User.findById(order.customer);
-            console.log("✅ Customer found:", customer ? customer.email : 'NOT FOUND');
-            
-            if (customer) {
-                console.log("📝 Generating email content...");
-                const emailContent = mailTemplates.orderStatusUpdateEmail(
-                    customer.firstName,
-                    order,
-                    'picked_up',
-                    'Your order has been picked up from the pharmacy and is on its way!'
-                );
-                console.log("📧 Calling mailSender...");
-                const result = await mailSender(
-                    customer.email,
-                    "Order Picked Up - Swasthya Sarthi",
-                    emailContent
-                );
-                console.log("✅ mailSender result:", result ? "SUCCESS" : "FAILED");
-            }
-            console.log("==========================================");
-        } catch (err) {
-            console.error("❌ Email error:", err.message);
-            console.error("❌ Full error:", err);
-        }
-
-        // Send response after email
+        // Send response FIRST
         res.status(200).json({
             success: true,
             message: "Pickup marked as complete",
             order
+        });
+
+        // Send email in background (fire and forget)
+        setImmediate(async () => {
+            try {
+                console.log("📧 [Background] Sending pickup email...");
+                const customer = await User.findById(order.customer);
+                
+                if (customer) {
+                    const emailContent = mailTemplates.orderStatusUpdateEmail(
+                        customer.firstName,
+                        order,
+                        'picked_up',
+                        'Your order has been picked up from the pharmacy and is on its way!'
+                    );
+                    
+                    await mailSender(
+                        customer.email,
+                        "Order Picked Up - Swasthya Sarthi",
+                        emailContent
+                    );
+                    console.log("✅ Pickup email sent to:", customer.email);
+                }
+            } catch (err) {
+                console.error("❌ Email error (non-blocking):", err.message);
+            }
         });
 
     } catch (error) {
@@ -368,43 +349,37 @@ exports.markOutForDelivery = async (req, res) => {
         order.outForDeliveryAt = new Date();
         await order.save();
 
-        // Send email BEFORE response
-        try {
-            console.log("==========================================");
-            console.log("🔔 OUT FOR DELIVERY - Sending email...");
-            console.log("Order ID:", order._id);
-            console.log("Customer ID:", order.customer);
-            
-            const customer = await User.findById(order.customer);
-            console.log("✅ Customer found:", customer ? customer.email : 'NOT FOUND');
-            
-            if (customer) {
-                console.log("📝 Generating email content...");
-                const emailContent = mailTemplates.orderStatusUpdateEmail(
-                    customer.firstName,
-                    order,
-                    'out_for_delivery',
-                    'Your order is out for delivery and will reach you soon!'
-                );
-                console.log("📧 Calling mailSender...");
-                const result = await mailSender(
-                    customer.email,
-                    "Out for Delivery - Swasthya Sarthi",
-                    emailContent
-                );
-                console.log("✅ mailSender result:", result ? "SUCCESS" : "FAILED");
-            }
-            console.log("==========================================");
-        } catch (err) {
-            console.error("❌ Email error:", err.message);
-            console.error("❌ Full error:", err);
-        }
-
-        // Send response after email
+        // Send response FIRST
         res.status(200).json({
             success: true,
             message: "Order marked as out for delivery",
             order
+        });
+
+        // Send email in background (fire and forget)
+        setImmediate(async () => {
+            try {
+                console.log("📧 [Background] Sending out for delivery email...");
+                const customer = await User.findById(order.customer);
+                
+                if (customer) {
+                    const emailContent = mailTemplates.orderStatusUpdateEmail(
+                        customer.firstName,
+                        order,
+                        'out_for_delivery',
+                        'Your order is out for delivery and will reach you soon!'
+                    );
+                    
+                    await mailSender(
+                        customer.email,
+                        "Out for Delivery - Swasthya Sarthi",
+                        emailContent
+                    );
+                    console.log("✅ Out for delivery email sent to:", customer.email);
+                }
+            } catch (err) {
+                console.error("❌ Email error (non-blocking):", err.message);
+            }
         });
 
     } catch (error) {
@@ -449,44 +424,38 @@ exports.markDeliveryComplete = async (req, res) => {
         volunteer.isAvailable = true; // Mark as available again
         await volunteer.save();
 
-        // Send email BEFORE response
-        try {
-            console.log("==========================================");
-            console.log("🔔 DELIVERY COMPLETE - Sending email...");
-            console.log("Order ID:", order._id);
-            console.log("Customer ID:", order.customer);
-            
-            const customer = await User.findById(order.customer);
-            console.log("✅ Customer found:", customer ? customer.email : 'NOT FOUND');
-            
-            if (customer) {
-                console.log("📝 Generating email content...");
-                const emailContent = mailTemplates.orderStatusUpdateEmail(
-                    customer.firstName,
-                    order,
-                    'delivered',
-                    'Your order has been delivered successfully! Thank you for choosing Swasthya Sarthi.'
-                );
-                console.log("📧 Calling mailSender...");
-                const result = await mailSender(
-                    customer.email,
-                    "Order Delivered - Swasthya Sarthi",
-                    emailContent
-                );
-                console.log("✅ mailSender result:", result ? "SUCCESS" : "FAILED");
-            }
-            console.log("==========================================");
-        } catch (err) {
-            console.error("❌ Email error:", err.message);
-            console.error("❌ Full error:", err);
-        }
-
-        // Send response after email
+        // Send response FIRST
         res.status(200).json({
             success: true,
             message: "Delivery marked as complete",
             order,
             deliveryCharges: order.deliveryCharges
+        });
+
+        // Send email in background (fire and forget)
+        setImmediate(async () => {
+            try {
+                console.log("📧 [Background] Sending delivery complete email...");
+                const customer = await User.findById(order.customer);
+                
+                if (customer) {
+                    const emailContent = mailTemplates.orderStatusUpdateEmail(
+                        customer.firstName,
+                        order,
+                        'delivered',
+                        'Your order has been delivered successfully! Thank you for choosing Swasthya Sarthi.'
+                    );
+                    
+                    await mailSender(
+                        customer.email,
+                        "Order Delivered - Swasthya Sarthi",
+                        emailContent
+                    );
+                    console.log("✅ Delivery complete email sent to:", customer.email);
+                }
+            } catch (err) {
+                console.error("❌ Email error (non-blocking):", err.message);
+            }
         });
 
     } catch (error) {
