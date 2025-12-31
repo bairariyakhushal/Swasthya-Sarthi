@@ -190,7 +190,7 @@ const Checkout = () => {
               setIsProcessing(false);
               
               // Redirect to orders page
-              navigate('/customer/my-orders');
+              navigate('/customer/orders');
             } catch (error) {
               console.error('❌ Payment verification error:', error);
               toast.error('Payment verification failed. Please contact support.');
