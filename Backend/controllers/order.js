@@ -379,29 +379,6 @@ exports.verifyPayment = async (req, res) => {
         order.razorpaySignature = razorpay_signature;
         await order.save();
 
-        // Send order confirmation email
-        try {
-            const customer = await User.findById(order.customer);
-            const pharmacy = await Pharmacy.findById(order.pharmacy);
-
-            if (customer && pharmacy) {
-                const emailContent = mailTemplates.orderConfirmationEmail(
-                    customer.firstName,
-                    order,
-                    pharmacy
-                );
-
-                await mailSender(
-                    customer.email,
-                    "Order Confirmed - Swasthya Sarthi",
-                    emailContent
-                );
-                console.log("Order confirmation email sent to:", customer.email);
-            }
-        } catch (emailError) {
-            console.error("Failed to send confirmation email:", emailError);
-        }
-
         // Reduce pharmacy inventory
         const pharmacy = await Pharmacy.findById(order.pharmacy);
         for (const medicine of order.medicines) {
@@ -414,16 +391,41 @@ exports.verifyPayment = async (req, res) => {
         }
         await pharmacy.save();
 
-
         const populatedOrder = await Order.findById(order._id)
             .populate('customer', 'firstName lastName email')
             .populate('pharmacy', 'name address')
             .populate('vendor', 'firstName lastName');
 
+        // Send response first (don't wait for email)
         res.status(200).json({
             success: true,
             message: "Payment verified and order confirmed",
             order: populatedOrder
+        });
+
+        // Send order confirmation email asynchronously (non-blocking)
+        setImmediate(async () => {
+            try {
+                const customer = await User.findById(order.customer);
+                const pharmacyData = await Pharmacy.findById(order.pharmacy);
+
+                if (customer && pharmacyData) {
+                    const emailContent = mailTemplates.orderConfirmationEmail(
+                        customer.firstName,
+                        order,
+                        pharmacyData
+                    );
+
+                    await mailSender(
+                        customer.email,
+                        "Order Confirmed - Swasthya Sarthi",
+                        emailContent
+                    );
+                    console.log("✅ Order confirmation email sent to:", customer.email);
+                }
+            } catch (emailError) {
+                console.error("❌ Failed to send confirmation email:", emailError.message);
+            }
         });
 
     } catch (error) {
