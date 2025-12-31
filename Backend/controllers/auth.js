@@ -52,19 +52,16 @@ exports.sendOTP = async (req, res) => {
             ...(process.env.NODE_ENV === 'development' && { otp: otp })
         });
 
-        // Send OTP email asynchronously in background (non-blocking)
-        setImmediate(async () => {
-            try {
-                const emailContent = mailTemplates.otpVerificationEmail(firstName, otp);
-                await mailSender(
-                    email,
-                    "Email Verification - Swasthya Sarthi",
-                    emailContent
-                );
-                console.log("✅ OTP email sent successfully to:", email);
-            } catch (emailError) {
-                console.error("❌ Failed to send OTP email:", emailError.message);
-            }
+        // Send OTP email asynchronously (fire and forget)
+        const emailContent = mailTemplates.otpVerificationEmail(firstName, otp);
+        mailSender(
+            email,
+            "Email Verification - Swasthya Sarthi",
+            emailContent
+        ).then(() => {
+            console.log("✅ OTP email sent successfully to:", email);
+        }).catch(emailError => {
+            console.error("❌ Failed to send OTP email:", emailError.message);
         });
     } catch (error) {
         console.log(error.message);
@@ -203,25 +200,29 @@ exports.signup = async (req, res) => {
         // Remove password from response
         user.password = undefined;
 
-        // Send welcome email after successful registration
-        try {
-            const emailContent = mailTemplates.welcomeEmail(firstName, accountType);
-            await mailSender(
-                email,
-                ` Welcome to Swasthya Sarthi - ${accountType} Account Created!`,
-                emailContent
-            );
-            console.log("Welcome email sent successfully to:", email);
-        } catch (emailError) {
-            console.error("Failed to send welcome email:", emailError);
-        }
-
-        return res.status(200).json({
+        // Return response first
+        const response = {
             success: true,
             user,
             roleDocument,
             message: `${accountType} registered successfully`,
+        };
+
+        res.status(200).json(response);
+
+        // Send welcome email after response (fire and forget)
+        const emailContent = mailTemplates.welcomeEmail(firstName, accountType);
+        mailSender(
+            email,
+            ` Welcome to Swasthya Sarthi - ${accountType} Account Created!`,
+            emailContent
+        ).then(() => {
+            console.log("Welcome email sent successfully to:", email);
+        }).catch(emailError => {
+            console.error("Failed to send welcome email:", emailError);
         });
+
+        return;
 
     } catch (error) {
         console.error("Signup error:", error);

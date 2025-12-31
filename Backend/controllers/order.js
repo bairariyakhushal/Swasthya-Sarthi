@@ -403,13 +403,17 @@ exports.verifyPayment = async (req, res) => {
             order: populatedOrder
         });
 
-        // Send order confirmation email asynchronously (non-blocking)
-        setImmediate(async () => {
+        console.log("Senfing se pehle hu ");
+
+        // Send order confirmation email asynchronously
+        (async () => {
             try {
+                console.log("🔔 Sending order confirmation email...");
                 const customer = await User.findById(order.customer);
                 const pharmacyData = await Pharmacy.findById(order.pharmacy);
 
                 if (customer && pharmacyData) {
+                    console.log("✅ Sending to:", customer.email);
                     const emailContent = mailTemplates.orderConfirmationEmail(
                         customer.firstName,
                         order,
@@ -421,12 +425,12 @@ exports.verifyPayment = async (req, res) => {
                         "Order Confirmed - Swasthya Sarthi",
                         emailContent
                     );
-                    console.log("✅ Order confirmation email sent to:", customer.email);
+                    console.log("✅ Order confirmation email sent!");
                 }
             } catch (emailError) {
                 console.error("❌ Failed to send confirmation email:", emailError.message);
             }
-        });
+        })();
 
     } catch (error) {
         console.error("Verify payment error:", error);

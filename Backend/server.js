@@ -74,5 +74,10 @@ app.get("/", (req, res) => {
 
 // Listening to the server
 app.listen(PORT, () => {
-	console.log(`App is listening at ${PORT}`);
+	console.log("==========================================");
+	console.log(`✅ Server is running on PORT ${PORT}`);
+	console.log(`🌐 API URL: http://localhost:${PORT}`);
+	console.log(`📧 Mail Host: ${process.env.MAIL_HOST}`);
+	console.log(`📧 Mail User: ${process.env.MAIL_USER}`);
+	console.log("==========================================");
 });

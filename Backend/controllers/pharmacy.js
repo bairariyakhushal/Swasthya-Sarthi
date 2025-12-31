@@ -377,29 +377,6 @@ exports.markOrderReadyForPickup = async (req, res) => {
         order.readyForPickupAt = new Date();
         await order.save();
 
-        // Send pickup ready email
-        try {
-            const customer = await User.findById(order.customer);
-            const pharmacy = await Pharmacy.findById(order.pharmacy);
-
-            if (customer && pharmacy) {
-                const emailContent = mailTemplates.pickupReadyEmail(
-                    customer.firstName,
-                    order,
-                    pharmacy
-                );
-
-                await mailSender(
-                    customer.email,
-                    "Order Ready for Pickup - Swasthya Sarthi",
-                    emailContent
-                );
-
-            }
-        } catch (emailError) {
-            console.error("Failed to send pickup ready email:", emailError);
-        }
-
         res.status(200).json({
             success: true,
             message: "Order marked as ready for pickup",
@@ -410,6 +387,27 @@ exports.markOrderReadyForPickup = async (req, res) => {
                 readyForPickupAt: order.readyForPickupAt
             }
         });
+
+        // Send pickup ready email in background (fire and forget)
+        User.findById(order.customer).then(customer => {
+            if (customer) {
+                Pharmacy.findById(order.pharmacy).then(pharmacy => {
+                    if (pharmacy) {
+                        const emailContent = mailTemplates.pickupReadyEmail(
+                            customer.firstName,
+                            order,
+                            pharmacy
+                        );
+
+                        mailSender(
+                            customer.email,
+                            "Order Ready for Pickup - Swasthya Sarthi",
+                            emailContent
+                        ).catch(err => console.error("Failed to send pickup ready email:", err));
+                    }
+                });
+            }
+        }).catch(err => console.error("Email error:", err));
 
     } catch (error) {
         console.error("Mark ready for pickup error:", error);

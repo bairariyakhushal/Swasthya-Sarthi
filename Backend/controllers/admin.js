@@ -57,28 +57,6 @@ exports.updatePharmacyApproval = async (req, res) => {
             pharmacy.rejectionReason = rejectionReason;
         }
 
-        // Send email
-        try {
-            const vendor = await User.findById(pharmacy.owner);
-            
-            if (vendor) {
-                const emailContent = mailTemplates.adminApprovalEmail(
-                    vendor.firstName,
-                    'Pharmacy',
-                    approvalStatus,
-                    rejectionReason
-                );
-                
-                await mailSender(
-                    vendor.email,
-                    `Pharmacy Application ${approvalStatus.charAt(0).toUpperCase() + approvalStatus.slice(1)} - Swasthya Sarthi`,
-                    emailContent
-                );
-            }
-        } catch (emailError) {
-            console.error("Failed to send approval email:", emailError);
-        }
-
         await pharmacy.save();
 
         const updatedPharmacy = await Pharmacy.findById(pharmacyId)
@@ -90,6 +68,24 @@ exports.updatePharmacyApproval = async (req, res) => {
             message: `Pharmacy ${approvalStatus} successfully`,
             pharmacy: updatedPharmacy
         });
+
+        // Send email in background (fire and forget)
+        User.findById(pharmacy.owner).then(vendor => {
+            if (vendor) {
+                const emailContent = mailTemplates.adminApprovalEmail(
+                    vendor.firstName,
+                    'Pharmacy',
+                    approvalStatus,
+                    rejectionReason
+                );
+                
+                mailSender(
+                    vendor.email,
+                    `Pharmacy Application ${approvalStatus.charAt(0).toUpperCase() + approvalStatus.slice(1)} - Swasthya Sarthi`,
+                    emailContent
+                ).catch(err => console.error("Failed to send approval email:", err));
+            }
+        }).catch(err => console.error("Email error:", err));
 
     } catch (error) {
         console.error("Update pharmacy approval error:", error);
@@ -155,28 +151,6 @@ exports.updateVolunteerApproval = async (req, res) => {
 
         await volunteer.save();
 
-        // Send volunteer approval email
-        try {
-            const user = await User.findById(volunteer.user);
-            
-            if (user) {
-                const emailContent = mailTemplates.adminApprovalEmail(
-                    user.firstName,
-                    'Volunteer',
-                    approvalStatus,
-                    rejectionReason
-                );
-                
-                await mailSender(
-                    user.email,
-                    `Volunteer Application ${approvalStatus.charAt(0).toUpperCase() + approvalStatus.slice(1)} - Swasthya Sarthi`,
-                    emailContent
-                );
-            }
-        } catch (emailError) {
-            console.error("Failed to send approval email:", emailError);
-        }
-
         const updatedVolunteer = await Volunteer.findById(volunteerId)
             .populate('user', 'firstName lastName email contactNumber')
             .populate('approvedBy', 'firstName lastName');
@@ -186,6 +160,24 @@ exports.updateVolunteerApproval = async (req, res) => {
             message: `Volunteer ${approvalStatus} successfully`,
             volunteer: updatedVolunteer
         });
+
+        // Send volunteer approval email in background (fire and forget)
+        User.findById(volunteer.user).then(user => {
+            if (user) {
+                const emailContent = mailTemplates.adminApprovalEmail(
+                    user.firstName,
+                    'Volunteer',
+                    approvalStatus,
+                    rejectionReason
+                );
+                
+                mailSender(
+                    user.email,
+                    `Volunteer Application ${approvalStatus.charAt(0).toUpperCase() + approvalStatus.slice(1)} - Swasthya Sarthi`,
+                    emailContent
+                ).catch(err => console.error("Failed to send approval email:", err));
+            }
+        }).catch(err => console.error("Email error:", err));
 
     } catch (error) {
         console.error("Update volunteer approval error:", error);
