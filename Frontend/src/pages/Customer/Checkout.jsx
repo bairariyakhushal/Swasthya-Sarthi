@@ -183,28 +183,18 @@ const Checkout = () => {
               
               console.log('🔐 Payment Verification Data:', paymentData);
               
-              await dispatch(verifyPayment(paymentData)).unwrap();
+              const verifyResult = await dispatch(verifyPayment(paymentData)).unwrap();
+              console.log('✅ Payment Verified:', verifyResult);
               
               toast.success('Payment successful!');
-              
-              // // Upload prescription after successful payment if needed
-              // if (result.needsPrescription && prescriptionFile && result.prescriptionStatus === 'pending_verification') {
-              //   try {
-              //     await dispatch(uploadPrescription({
-              //       orderId: result.orderId,
-              //       file: prescriptionFile,
-              //     })).unwrap();
-              //     toast.success('Prescription uploaded successfully');
-              //   } catch (error) {
-              //     toast.error('Failed to upload prescription');
-              //   }
-              // }
+              setIsProcessing(false);
               
               // Redirect to orders page
               navigate('/customer/my-orders');
             } catch (error) {
+              console.error('❌ Payment verification error:', error);
               toast.error('Payment verification failed. Please contact support.');
-              console.error('Payment verification error:', error);
+              setIsProcessing(false);
             }
           },
           prefill: {
