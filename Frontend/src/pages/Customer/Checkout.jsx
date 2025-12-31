@@ -159,7 +159,7 @@ const Checkout = () => {
         // If cash payment for pickup, skip Razorpay and redirect
         if (deliveryType === DELIVERY_TYPES.PICKUP && paymentMethod === 'cash') {
           toast.success('Order placed successfully! Pay at pharmacy counter.');
-          navigate('/customer/orders');
+          navigate('/customer/my-orders');
           return;
         }
         
@@ -201,7 +201,7 @@ const Checkout = () => {
               // }
               
               // Redirect to orders page
-              navigate('/customer/orders');
+              navigate('/customer/my-orders');
             } catch (error) {
               toast.error('Payment verification failed. Please contact support.');
               console.error('Payment verification error:', error);
