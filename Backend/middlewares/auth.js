@@ -8,8 +8,13 @@ exports.auth = async (req, res, next) => {
         // Extracting JWT from request cookies, body or header
         const token = req.cookies.token || req.body.token || req.header("Authorization")?.replace("Bearer ", "");
 
+        console.log("🔐 Auth middleware - Token check:");
+        console.log("   Cookie token:", req.cookies.token ? "exists" : "missing");
+        console.log("   Header token:", req.header("Authorization") ? "exists" : "missing");
+
         // If JWT is missing, return 401 Unauthorized response
         if (!token) {
+            console.log("❌ Token missing");
             return res.status(401).json({ 
                 success: false, 
                 message: `Token Missing` 
@@ -19,14 +24,16 @@ exports.auth = async (req, res, next) => {
         try {
             // Verifying the JWT using the secret key stored in environment variables
             const decode = jwt.verify(token, process.env.JWT_SECRET);
-            console.log(decode);
+            console.log("✅ Token verified:", decode);
             // Storing the decoded JWT payload in the request object for further use
             req.user = decode;
         } catch (error) {
             // If JWT verification fails, return 401 Unauthorized response
+            console.log("❌ Token verification failed:", error.message);
             return res.status(401).json({ 
                 success: false, 
-                message: "token is invalid" 
+                message: "token is invalid",
+                error: error.message 
             });
         }
 
@@ -34,9 +41,11 @@ exports.auth = async (req, res, next) => {
         next();
     } catch (error) {
         // If there is an error during the authentication process, return 401 Unauthorized response
+        console.log("❌ Auth middleware error:", error);
         return res.status(401).json({
             success: false,
             message: `Something Went Wrong While Validating the Token`,
+            error: error.message
         });
     }
 };
@@ -86,19 +95,43 @@ exports.isVendor = async (req, res, next) => {
 // Middleware for checking if user is Customer
 exports.isCustomer = async (req, res, next) => {
     try {
+        console.log("👤 Checking customer role for:", req.user);
+        
+        if (!req.user || !req.user.email) {
+            console.log("❌ User not found in request");
+            return res.status(401).json({
+                success: false,
+                message: "User authentication failed",
+            });
+        }
+
         const userDetails = await User.findOne({ email: req.user.email });
+        
+        if (!userDetails) {
+            console.log("❌ User not found in database:", req.user.email);
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+            });
+        }
+
+        console.log("✅ User found:", userDetails.email, "Type:", userDetails.accountType);
 
         if (userDetails.accountType !== "Customer") {
-            return res.status(401).json({
+            console.log("❌ Not a customer:", userDetails.accountType);
+            return res.status(403).json({
                 success: false,
                 message: "This is a Protected Route for Customer",
             });
         }
+        
         next();
     } catch (error) {
+        console.log("❌ isCustomer error:", error);
         return res.status(500).json({ 
             success: false, 
-            message: `User Role Can't be Verified` 
+            message: `User Role Can't be Verified`,
+            error: error.message 
         });
     }
 };
