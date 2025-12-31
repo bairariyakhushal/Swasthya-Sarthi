@@ -23,7 +23,8 @@ app.use(cookieParser());
 app.use(
 	cors({
 		origin: [
-			"http://localhost:1432", 
+			"http://localhost:1432",
+			"http://localhost:1433",
 			"http://localhost:5173", 
 			"http://localhost:3000",
 			"https://swasthya-sarthi.vercel.app",
