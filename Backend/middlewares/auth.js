@@ -5,8 +5,9 @@ const User = require("../models/user");
 // Auth middleware
 exports.auth = async (req, res, next) => {
     try {
-        // Extracting JWT from request cookies, body or header
-        const token =  req.body.token || req.header("Authorization")?.replace("Bearer ", "");
+        // Extracting JWT from Authorization header only (most reliable in production)
+        const authHeader = req.header("Authorization");
+        const token = authHeader ? authHeader.replace("Bearer ", "") : null;
 
         // If JWT is missing, return 401 Unauthorized response
         if (!token) {
