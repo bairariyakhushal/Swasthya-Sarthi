@@ -166,7 +166,7 @@ exports.orderConfirmationEmail = (customerName, order, pharmacy) => {
                 `}
                 
                 <div style="text-align: center;">
-                    <a class="cta" href="http://localhost:3000/track/${order._id}">Track Your Order</a>
+                    <a class="cta" href="https://swasthya-sarthi.vercel.app/customer/track-order/${order._id}">Track Your Order</a>
                 </div>
             </div>
             
@@ -269,7 +269,7 @@ exports.orderStatusUpdateEmail = (customerName, order, status, message) => {
     <body>
         <div class="container">
             <div class="header">
-                <div class="logo"><a href="https://EduElevate-edtech-project.vercel.app"><img class="logo" src="https://res.cloudinary.com/dzkaggnlf/image/upload/v1758460938/Gemini_Generated_Image_2f7v82f7v82f7v82_jwo9nf.png"
+                <div class="logo"><a href="https://swasthya-sarthi.vercel.app"><img class="logo" src="https://res.cloudinary.com/dzkaggnlf/image/upload/v1758460938/Gemini_Generated_Image_2f7v82f7v82f7v82_jwo9nf.png"
                     alt="Swasthya Sarthi Logo"></a></div>
                 <p>Order Status Update</p>
             </div>
@@ -294,7 +294,7 @@ exports.orderStatusUpdateEmail = (customerName, order, status, message) => {
                 </div>
                 
                 <div style="text-align: center;">
-                    <a class="cta" href="http://localhost:3000/track/${order._id}">Track Your Order</a>
+                    <a class="cta" href="https://swasthya-sarthi.vercel.app/customer/track-order/${order._id}">Track Your Order</a>
                 </div>
             </div>
             
@@ -389,7 +389,7 @@ exports.pickupReadyEmail = (customerName, order, pharmacy) => {
     <body>
         <div class="container">
             <div class="header">
-                <div class="logo"><div class="logo"><a href="https://EduElevate-edtech-project.vercel.app"><img class="logo" src="https://res.cloudinary.com/dzkaggnlf/image/upload/v1758460938/Gemini_Generated_Image_2f7v82f7v82f7v82_jwo9nf.png"
+                <div class="logo"><div class="logo"><a href="https://swasthya-sarthi.vercel.app"><img class="logo" src="https://res.cloudinary.com/dzkaggnlf/image/upload/v1758460938/Gemini_Generated_Image_2f7v82f7v82f7v82_jwo9nf.png"
                     alt="Swasthya Sarthi Logo"></a></div></div>
                 <p>Your Order is Ready! </p>
             </div>
@@ -421,7 +421,7 @@ exports.pickupReadyEmail = (customerName, order, pharmacy) => {
                 </ul>
                 
                 <div style="text-align: center;">
-                    <a class="cta" href="http://localhost:3000/track/${order._id}">View Order Details</a>
+                    <a class="cta" href="https://swasthya-sarthi.vercel.app/customer/track-order/${order._id}">View Order Details</a>
                 </div>
             </div>
             
@@ -532,7 +532,7 @@ exports.adminApprovalEmail = (name, type, status, reason = '') => {
     <body>
         <div class="container">
             <div class="header">
-                <div class="logo"><div class="logo"><a href="https://EduElevate-edtech-project.vercel.app"><img class="logo" src="https://res.cloudinary.com/dzkaggnlf/image/upload/v1758460938/Gemini_Generated_Image_2f7v82f7v82f7v82_jwo9nf.png"
+                <div class="logo"><div class="logo"><a href="https://swasthya-sarthi.vercel.app"><img class="logo" src="https://res.cloudinary.com/dzkaggnlf/image/upload/v1758460938/Gemini_Generated_Image_2f7v82f7v82f7v82_jwo9nf.png"
                     alt="Swasthya Sarthi Logo"></a></div></div>
                 <p>Application Status Update</p>
             </div>
@@ -564,7 +564,7 @@ exports.adminApprovalEmail = (name, type, status, reason = '') => {
                     </ul>
                     
                     <div style="text-align: center;">
-                        <a class="cta" href="http://localhost:3000/login">Login to Dashboard</a>
+                        <a class="cta" href="https://swasthya-sarthi.vercel.app/login">Login to Dashboard</a>
                     </div>
                 ` : `
                     <p> We regret to inform you that your ${type} application has been <strong>rejected</strong> at this time.</p>
@@ -600,7 +600,7 @@ exports.adminApprovalEmail = (name, type, status, reason = '') => {
                     </div>
                     
                     <div style="text-align: center; margin-top: 15px;">
-                        <a class="cta" href="http://localhost:3000/apply" style="background-color: #28a745;">Reapply Now</a>
+                        <a class="cta" href="https://swasthya-sarthi.vercel.app/signup" style="background-color: #28a745;">Reapply Now</a>
                     </div>
                 `}
             </div>
@@ -712,7 +712,7 @@ exports.otpVerificationEmail = (name, otp) => {
     <body>
         <div class="container">
             <div class="header">
-                <div class="logo"><div class="logo"><a href="https://EduElevate-edtech-project.vercel.app"><img class="logo" src="https://res.cloudinary.com/dzkaggnlf/image/upload/v1758460938/Gemini_Generated_Image_2f7v82f7v82f7v82_jwo9nf.png"
+                <div class="logo"><div class="logo"><a href="https://swasthya-sarthi.vercel.app"><img class="logo" src="https://res.cloudinary.com/dzkaggnlf/image/upload/v1758460938/Gemini_Generated_Image_2f7v82f7v82f7v82_jwo9nf.png"
                     alt="Swasthya Sarthi Logo"></a></div></div>
                 <p>Email Verification Required</p>
             </div>
@@ -874,7 +874,7 @@ exports.welcomeEmail = (userName, accountType) => {
     <body>
         <div class="container">
             <div class="header">
-                <div class="logo"><div class="logo"><a href="https://EduElevate-edtech-project.vercel.app"><img class="logo" src="https://res.cloudinary.com/dzkaggnlf/image/upload/v1758460938/Gemini_Generated_Image_2f7v82f7v82f7v82_jwo9nf.png"
+                <div class="logo"><div class="logo"><a href="https://swasthya-sarthi.vercel.app"><img class="logo" src="https://res.cloudinary.com/dzkaggnlf/image/upload/v1758460938/Gemini_Generated_Image_2f7v82f7v82f7v82_jwo9nf.png"
                     alt="Swasthya Sarthi Logo"></a></div></div>
                 <h2>Welcome to Your Health Journey!</h2>
             </div>
@@ -964,7 +964,7 @@ exports.welcomeEmail = (userName, accountType) => {
                 ` : ''}
                 
                 <div style="text-align: center;">
-                    <a class="cta" href="http://localhost:3000/dashboard">Go to Dashboard</a>
+                    <a class="cta" href="https://swasthya-sarthi.vercel.app/volunteer/home">Go to Dashboard</a>
                 </div>
                 
                 <h3> Need Help?</h3>
@@ -1135,7 +1135,7 @@ exports.vendorSalesAnalyticsEmail = (vendorName, analytics) => {
                 </ul>
                 
                 <div style="text-align: center;">
-                    <a class="cta" href="http://localhost:3000/vendor/dashboard">View Detailed Analytics</a>
+                    <a class="cta" href="https://swasthya-sarthi.vercel.app/vendor/dashboard">View Detailed Analytics</a>
                 </div>
             </div>
             
@@ -1147,3 +1147,4 @@ exports.vendorSalesAnalyticsEmail = (vendorName, analytics) => {
     </body>
     </html>`;
 };
+
