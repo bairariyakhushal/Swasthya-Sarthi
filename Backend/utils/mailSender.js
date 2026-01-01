@@ -4,24 +4,28 @@ require('dotenv').config();
 const mailSender = async (email, title, body) => {
     try {
         // Brevo SMTP Configuration (more reliable than Gmail)
+        // Using port 465 with SSL for better production compatibility
         let transporter = nodemailer.createTransport({
             host: process.env.MAIL_HOST, // smtp-relay.brevo.com
-            port: 587,
-            secure: false, // Use TLS
+            port: 465,
+            secure: true, // Use SSL
             auth: {
                 user: process.env.MAIL_USER, // Your Brevo login email
                 pass: process.env.MAIL_PASS  // Your Brevo SMTP key
             },
-            // Optimized timeout settings for Brevo
-            connectionTimeout: 10000, // 10 seconds
-            greetingTimeout: 5000,    // 5 seconds
-            socketTimeout: 10000,     // 10 seconds
+            // Increased timeout settings for production environment
+            connectionTimeout: 30000, // 30 seconds
+            greetingTimeout: 15000,   // 15 seconds
+            socketTimeout: 30000,     // 30 seconds
             // Pool configuration for better performance
             pool: true,
             maxConnections: 5,
             maxMessages: 100,
             rateDelta: 1000,  // 1 second between messages
-            rateLimit: 5      // max 5 messages per rateDelta
+            rateLimit: 5,     // max 5 messages per rateDelta
+            // Additional settings for production stability
+            logger: false,
+            debug: false
         });
 
         // Verify transporter configuration
