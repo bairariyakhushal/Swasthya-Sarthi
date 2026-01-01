@@ -3,34 +3,35 @@ require('dotenv').config();
 
 const mailSender = async (email, title, body) => {
     try {
-        // Brevo SMTP Configuration (more reliable than Gmail)
-        // Using port 465 with SSL for better production compatibility
+        // Brevo SMTP Configuration
+        // Using port 2525 - specifically for cloud platforms like Render
         let transporter = nodemailer.createTransport({
             host: process.env.MAIL_HOST, // smtp-relay.brevo.com
-            port: 465,
-            secure: true, // Use SSL
+            port: 2525,
+            secure: false, // STARTTLS on port 2525
             auth: {
                 user: process.env.MAIL_USER, // Your Brevo login email
                 pass: process.env.MAIL_PASS  // Your Brevo SMTP key
             },
-            // Increased timeout settings for production environment
-            connectionTimeout: 30000, // 30 seconds
-            greetingTimeout: 15000,   // 15 seconds
-            socketTimeout: 30000,     // 30 seconds
-            // Pool configuration for better performance
-            pool: true,
-            maxConnections: 5,
-            maxMessages: 100,
-            rateDelta: 1000,  // 1 second between messages
-            rateLimit: 5,     // max 5 messages per rateDelta
+            // Very high timeout settings for production
+            connectionTimeout: 60000, // 60 seconds
+            greetingTimeout: 30000,   // 30 seconds
+            socketTimeout: 60000,     // 60 seconds
+            // Disable pooling for more reliability
+            pool: false,
             // Additional settings for production stability
             logger: false,
-            debug: false
+            debug: false,
+            // Important: Force new connection
+            maxConnections: 1,
+            tls: {
+                rejectUnauthorized: false // Accept self-signed certificates
+            }
         });
 
-        // Verify transporter configuration
-        await transporter.verify();
-        console.log("📧 SMTP connection verified successfully");
+        // Skip verification - it causes timeout in some hosting environments
+        // await transporter.verify();
+        console.log("📧 Sending email via Brevo SMTP...");
 
         let info = await transporter.sendMail({
             from: `"${process.env.MAIL_FROM_NAME || 'Swasthya Sarthi'}" <${process.env.MAIL_FROM_EMAIL || process.env.MAIL_USER}>`,
@@ -46,9 +47,10 @@ const mailSender = async (email, title, body) => {
     } catch (err) {
         console.error("❌ Failed to send email to:", email);
         console.error("🔍 Error details:", err.message);
+        console.error("🔍 Error code:", err.code);
         
         // Better error handling
-        if (err.code === 'ECONNECTION') {
+        if (err.code === 'ECONNECTION' || err.code === 'ETIMEDOUT') {
             throw new Error("Unable to connect to email server. Please check your network connection.");
         } else if (err.code === 'EAUTH') {
             throw new Error("Email authentication failed. Please check your SMTP credentials.");
